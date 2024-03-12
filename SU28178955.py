@@ -40,123 +40,139 @@ def read_stdin_to_board( board ):
         line = stdio.readLine()
         line_arguments = line.split(" ")
 
-        match line_arguments[0]:
 
-            case "#":
-                break
+        if line_arguments[0] == "#":
+            break
+        
+        # Place sinks
+        elif line_arguments[0] == "s":
+
+            # Argument Length Check
+            if len(line_arguments) < 4:
+                stdio.writeln(ERRORS["few_args"])
+                continue
+            elif len(line_arguments) > 4:
+                stdio.writeln(ERRORS["many_args"])
+                continue
+
+            # Unpack arguments
+            _, size, row, col = line_arguments
+            size, row, col = (int(size), int(row), int(col))
+
+            # Piece check
+            if size not in [1,2]:
+                stdio.writeln(ERRORS["invalid_piece(p)"](size))
+                continue
+
+            # Coordinate check
+            if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
+                stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
+                continue
+
+            # Size check
+            if size == 2:
+                if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-2, 0, args["board_width"]-2):
+                    stdio.writeln(ERRORS["sink_wrong_pos"])
+                    continue
+
+            for r in range(size):
+                for c in range(size):
+                    board[args["board_height"]-row-r-1][col+c] = "s"
+
+        # Place blocked tiles
+        elif line_arguments[0] == "x":
+
+            # Argument Length Check
+            if len(line_arguments) < 3:
+                stdio.writeln(ERRORS["few_args"])
+                continue
+            elif len(line_arguments) > 3:
+                stdio.writeln(ERRORS["many_args"])
+                continue
+
+            # Unpack arguments
+            _, row, col = line_arguments
+            row, col = (int(row), int(col))
+
+            if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
+                stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
+                continue
+
+            board[args["board_height"]-row-1][col] = "x"
+
+        # Place Pieces
+        elif line_arguments[0] == "d" or line_arguments[0] == "l":
+
+            # Argument Length Check
+            if len(line_arguments) < 4:
+                stdio.writeln(ERRORS["few_args"])
+                continue
+            elif len(line_arguments) > 4:
+                stdio.writeln(ERRORS["many_args"])
+                continue
             
-            # Place sinks
-            case "s":
+            # Unpack arguments
+            team, piece_type, row, col = line_arguments
+            row, col = (int(row), int(col))
 
-                # Argument Length Check
-                if len(line_arguments) < 4:
-                    stdio.writeln(ERRORS["few_args"])
-                    continue
-                elif len(line_arguments) > 4:
-                    stdio.writeln(ERRORS["many_args"])
-                    continue
+            # Choose board id
+            if team == "d": id = piece_type.upper()
+            else: id = piece_type
 
-                # Unpack arguments
-                _, size, row, col = line_arguments
-                size, row, col = (int(size), int(row), int(col))
+            # Check coords
+            if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
+                stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
+                continue
 
-                # Piece check
-                if size not in [1,2]:
-                    stdio.writeln(ERRORS["invalid_piece(p)"](size))
-                    continue
+            # Place pieces    
+            if piece_type in ['a','b','c']:
+                board[args["board_height"]-row-1][col] = id
 
-                # Coordinate check
-                if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
-                    stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
-                    continue
+            elif piece_type == 'd':
 
                 # Size check
-                if size == 2:
-                    if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-2, 0, args["board_width"]-2):
-                        stdio.writeln(ERRORS["sink_wrong_pos"])
-                        continue
-
-                for r in range(size):
-                    for c in range(size):
-                        board[args["board_height"]-row-r-1][col+c] = "s"
-
-            # Place blocked tiles
-            case "x":
-
-                # Argument Length Check
-                if len(line_arguments) < 3:
-                    stdio.writeln(ERRORS["few_args"])
-                    continue
-                elif len(line_arguments) > 3:
-                    stdio.writeln(ERRORS["many_args"])
+                if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-2, 0, args["board_width"]-2):
+                    stdio.writeln(ERRORS["piece_wrong_pos"])
                     continue
 
-                # Unpack arguments
-                _, row, col = line_arguments
-                row, col = (int(row), int(col))
-
-                if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
-                    stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
-                    continue
-
-                board[args["board_height"]-row-1][col] = "x"
-
-            # Place Pieces
-            case "d" | "l":
-
-                # Argument Length Check
-                if len(line_arguments) < 4:
-                    stdio.writeln(ERRORS["few_args"])
-                    continue
-                elif len(line_arguments) > 4:
-                    stdio.writeln(ERRORS["many_args"])
-                    continue
+                root_id = int(row)*args["board_width"]+int(col)
+                board[args["board_height"]-row-1][col] = id
+                board[args["board_height"]-row-2][col] = root_id
+                board[args["board_height"]-row-2][col+1] = root_id
+                board[args["board_height"]-row-1][col+1] = root_id
                 
-                # Unpack arguments
-                team, piece_type, row, col = line_arguments
-                row, col = (int(row), int(col))
+            else:
+                stdio.writeln(ERRORS["invalid_piece(p)"](piece_type))
 
-                # Choose board id
-                if team == "d": id = piece_type.upper()
-                else: id = piece_type
+        else:
+            stdio.writeln(ERRORS["invalid_object(o)"](line_arguments[0]))
 
-                # Check coords
-                if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
-                    stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
-                    continue
 
-                # Place pieces    
-                if piece_type in ['a','b','c']:
-                    board[args["board_height"]-row-1][col] = id
+def print_board( board ):
 
-                elif piece_type == 'd':
+    height, width = (len(board), len(board[0]))
 
-                    # Size check
-                    if not VALIDATORS["coordinates_range"](row, col, 0, args["board_height"]-2, 0, args["board_width"]-2):
-                        stdio.writeln(ERRORS["piece_wrong_pos"])
-                        continue
+    # Top coordinates
+    stdio.writeln(f"   {'  '.join([str(x) for x in range(width)])}")
 
-                    root_id = int(row)*args["board_width"]+int(col)
-                    board[args["board_height"]-row-1][col] = id
-                    board[args["board_height"]-row-2][col] = root_id
-                    board[args["board_height"]-row-2][col+1] = root_id
-                    board[args["board_height"]-row-1][col+1] = root_id
-                    
-                else:
-                    stdio.writeln(ERRORS["invalid_piece(p)"](piece_type))
+    for rdx in range(height*2+1):
 
-            case _:
-                stdio.writeln(ERRORS["invalid_object(o)"](line_arguments[0]))
+        line = ''
+
+        if rdx % 2 == 0:
+            line += f'  {"".join(["+--" for x in range(width)])}+'
+        else:
+            pass
+
+        stdio.writeln(line)
+
 
 
 def main( args ):
 
     board = [[" " for x in range(args["board_width"])] for y in range(args["board_height"])]
     read_stdin_to_board(board)
-   
-
-    for row in board:
-        stdio.writeln(row)
+    print_board(board)
 
 
 
@@ -183,15 +199,17 @@ if __name__ == "__main__":
         # Data type check
         try:
             args = {"board_height" : int(args[1]), "board_width" : int(args[2]), "gui" : int(args[3])}
+
+            # Range Check
+            if not ( VALIDATORS["range"](args["board_height"], 8, 10) and VALIDATORS["range"](args["board_height"], 8, 10) and args["gui"] in [0,1]):
+                stdio.writeln(ERRORS['illegal'])
+                valid_args = False
+
         except:
             stdio.writeln(ERRORS['illegal'])
             valid_args = False
 
-        # Range Check
-        if not ( VALIDATORS["range"](args["board_height"], 8, 10) and VALIDATORS["range"](args["board_height"], 8, 10) and args["gui"] in [0,1]):
-            stdio.writeln(ERRORS['illegal'])
-            valid_args = False
-       
+
         # Check validation and start
         if valid_args:
             main(args)

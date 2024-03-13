@@ -151,15 +151,11 @@ def read_stdin_to_board( board ):
 def print_board( board ):
 
     height, width = (len(board), len(board[0]))
-
-    # Top coordinates
     stdio.writeln(f"   {'  '.join([str(x) for x in range(width)])}  ")
 
     for rdx in range(height*2+1):
 
-        line = ''
-        board_row = round((rdx-1)/2.0)
-        space, empty = (' ', '')
+        space, empty, line, board_row = (' ', '', '', round((rdx-1)/2.0))
 
         if rdx % 2 == 0:
             line += f'  {"".join(["+--" for x in range(width)])}+'

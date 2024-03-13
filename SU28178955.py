@@ -153,16 +153,18 @@ def print_board( board ):
     height, width = (len(board), len(board[0]))
 
     # Top coordinates
-    stdio.writeln(f"   {'  '.join([str(x) for x in range(width)])}")
+    stdio.writeln(f"   {'  '.join([str(x) for x in range(width)])}  ")
 
     for rdx in range(height*2+1):
 
         line = ''
+        board_row = round((rdx-1)/2.0)
+        space, empty = (' ', '')
 
         if rdx % 2 == 0:
             line += f'  {"".join(["+--" for x in range(width)])}+'
         else:
-            pass
+            line += f'{round(height-1-board_row)} |{"".join([f"{ (lambda char : space if len(str(char)) < 2 else empty)(board[board_row][x]) }{board[board_row][x]}|" for x in range(width)])}'
 
         stdio.writeln(line)
 
@@ -213,4 +215,3 @@ if __name__ == "__main__":
         # Check validation and start
         if valid_args:
             main(args)
-

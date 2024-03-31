@@ -8,10 +8,12 @@ ERRORS = {
     "many_args" : "ERROR: Too many arguments",
     "sink_wrong_pos" : "ERROR: Sink in the wrong position",
     "piece_wrong_pos" : "ERROR: Piece in the wrong position",
+    "piece_not_owned" : "ERROR: Piece does not belong to the correct player",
 
     "not_on_board(r,c)" : lambda r,c : f"ERROR: Field {r} {c} not on board",
     "invalid_object(o)" : lambda o: f"ERROR: Invalid object type {o}",
     "invalid_piece(p)" : lambda p: f"ERROR: Invalid piece type {p}",
+    "field_not_free(r,c)" : lambda r,c : f"ERROR: Field {r} {c} not free"
     
 }
 
@@ -96,12 +98,12 @@ def print_board( board ):
 
     for rdx in range(height*2+1):
 
-        space, empty, line, board_row = (' ', '', '', round((rdx-1)/2.0))
+        space, line, board_row = (' ', '', round((rdx-1)/2.0))
 
         if rdx % 2 == 0:
             line += f'  {"".join(["+--" for x in range(width)])}+'
         else:
-            line += f'{round(height-1-board_row)} |{"".join([f"{ (lambda char : space if len(str(char)) < 2 else empty)(board[board_row][x]) }{board[board_row][x]}|" for x in range(width)])}'
+            line += f'{round(height-1-board_row)} |{"".join([f"{ space*(2-len(str(board[board_row][x])))+str(board[board_row][x]) }|" for x in range(width)])}'
 
         stdio.writeln(line)
 
@@ -238,7 +240,6 @@ def read_stdin_setup_to_board( board ):
         else:
             stdio.writeln(ERRORS["invalid_object(o)"](line_arguments[0]))
 
-
 def check_win_conditions( board ):
     return False
 
@@ -264,32 +265,59 @@ def move_pieces ( board, command, lights_turn ):
     # Moving pieces
     if move_type in list("udlr"):
 
-        piece_upright = check_piece_upright(board, row, col)
-        light_team = (lambda x: True if x.lower() == x else False)(board[max_row-row][col])
-        piece_type = board[max_row-row][col].lower()
+        piece_upright = check_piece_upright(board, row, col) # True if piece occupies 1 slot
+        light_team = (lambda x: True if x.lower() == x else False)(board[max_row-row][col]) # True if piece owned by light team
+        piece_type_raw = board[max_row-row][col]
+        piece_type = piece_type_raw.lower() # Get type to determine how movement will function
+        piece_code = f"{row*(max_col+1) + col}"
 
         # Check if piece not owned
-        if not (light_team == lights_turn): stdio.writeln(ERRORS["illegal"]); return
+        if not (light_team == lights_turn): stdio.writeln(ERRORS["piece_not_owned"]); return
 
         # Moving A, B or C blocks
         if piece_type in list("abc"):
 
             sizes = {'a' : 1, 'b' : 2, "c" : 3}
-            size = sizes[piece_type]
+            directions = {'u' : (-1,0), 'd' : (1,0), 'l' : (0,-1), 'r' : (0,1)}
 
-            # Range check
-            if not (row <= max_row-size):
-                stdio.writeln(ERRORS["illegal"])
-                return
+            direction = directions[move_type]
+            size = sizes[piece_type]
+            
+            if piece_upright:
+
+                # Check for no obstructions
+                valid = True
+                obstructed = []
+
+                for i in range(1,size+1):
+                    if board[max_row-row+direction[0]*i][col+direction[1]*i]:
+                        valid = False
+                        obstructed.append(([row-direction[0]*i],[col+direction[1]*i]))
+
+                obstructed.sort(key=lambda x : x[0]+x[1])
+                if not valid: stdio.writeln(ERRORS["field_not_free(r,c)"](obstructed[0][0],obstructed[0][1])); return
+
+
+                # Find new origin and calculate piece code
+                affected_tiles = []
+                for i in range(1,size+1):
+                    affected_tiles.append((row-direction[0]*i,col+direction[1]*i))
+                board[max_row-row][col] = ''
+
+                affected_tiles.sort(key=lambda x : x[0]+x[1])
+                origin_tile = affected_tiles[0]
+                new_code = f"{origin_tile[0]*(max_col+1) + origin_tile[1]}"
+
+                # Write new origin and coordinates                
+                for tile in affected_tiles:
+                    board[max_row-tile[0]][tile[1]] = new_code
+                board[max_row-origin_tile[0]][origin_tile[1]] = piece_type_raw
+
+
+            else:
+                stdio.writeln("TODO: IMPLEMENT NON-UPRIGHT MOVEMENT")
                 
-            if move_type == "u":
-                pass
-            elif move_type =="d":
-                pass
-            if move_type == "l":
-                pass
-            elif move_type =="r":
-                pass
+            
         
         # Moving a sink or a 2x2 block
         elif piece_type in list("ds"):
@@ -297,7 +325,7 @@ def move_pieces ( board, command, lights_turn ):
 
         # Valid piece not at coords given
         else:
-            stdio.writeln(ERRORS["illegal"])
+            stdio.writeln(ERRORS["illegal"]+"no piece")
             return
 
 
@@ -305,15 +333,19 @@ def move_pieces ( board, command, lights_turn ):
 def main( args ):
 
     # Board setup
-    board = [[" " for x in range(args["board_width"])] for y in range(args["board_height"])]
+    board = [["" for x in range(args["board_width"])] for y in range(args["board_height"])]
     read_stdin_setup_to_board(board)
 
     # Gameloop var
     lights_turn = True
-    turn = 1
+    turncounter = 0
 
     # Gameloop
     while True:
+        
+        # Keep track of turns
+        turncounter += 1
+        if turncounter == 3: turncounter = 1; lights_turn = not lights_turn
 
         # Read command or end partial game
         try: command = stdio.readLine()
@@ -325,10 +357,7 @@ def main( args ):
         # Check for win conditions
         if check_win_conditions(board):
             break
-
-        # increment loopvar
-        lights_turn = not lights_turn
-        turn += 1
+        
 
 
 

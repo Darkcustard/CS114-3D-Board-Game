@@ -1,0 +1,7 @@
+pip
+wheel
+setuptools
+numpy
+pygame
+mypy
+su-stdlibs-python

@@ -13,6 +13,7 @@ ERRORS = {
     "not_on_board(r,c)" : lambda r,c : f"ERROR: Field {r} {c} not on board",
     "invalid_object(o)" : lambda o: f"ERROR: Invalid object type {o}",
     "invalid_piece(p)" : lambda p: f"ERROR: Invalid piece type {p}",
+    "invalid_direction(d)" : lambda d : f"ERROR: Invalid direction {d}",
     "field_not_free(r,c)" : lambda r,c : f"ERROR: Field {r} {c} not free"
     
 }
@@ -109,6 +110,8 @@ def print_board( board ):
 
 def read_stdin_setup_to_board( board ):
 
+    valid_setup = True
+
     while True:
 
         # Readline or exit if EOF (for testing etc.)
@@ -119,7 +122,8 @@ def read_stdin_setup_to_board( board ):
 
 
         if line_arguments[0] == "#":
-            print_board(board)
+            if valid_setup:
+                print_board(board)
             break
 
         # Place sinks
@@ -128,9 +132,11 @@ def read_stdin_setup_to_board( board ):
             # Argument Length Check
             if len(line_arguments) < 4:
                 stdio.writeln(ERRORS["few_args"])
+                valid_setup = False
                 continue
             elif len(line_arguments) > 4:
                 stdio.writeln(ERRORS["many_args"])
+                valid_setup = False
                 continue
 
             # Unpack arguments
@@ -140,32 +146,38 @@ def read_stdin_setup_to_board( board ):
             # Piece check
             if size not in [1,2]:
                 stdio.writeln(ERRORS["invalid_piece(p)"](size))
+                valid_setup = False
                 continue
 
             # Coordinate check
             if not check_coordinates_range_inclusive(row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
                 stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
+                valid_setup = False
                 continue
 
             # Size check
             if size == 2:
                 if not check_coordinates_range_inclusive(row, col, 0, args["board_height"]-2, 0, args["board_width"]-2):
                     stdio.writeln(ERRORS["sink_wrong_pos"])
+                    valid_setup = False
                     continue
 
             # Location check
             if size == 1:
                 if not( (row < 3 or row > args["board_height"]-4) or (col < 3 or col > args["board_width"]-4)):
                     stdio.writeln(ERRORS['sink_wrong_pos'])
+                    valid_setup = False
                     continue
             else:
                 if not( (row < 2 or row > args["board_height"]-4) or (col < 2 or col > args["board_width"]-4)):
                     stdio.writeln(ERRORS['sink_wrong_pos'])
+                    valid_setup = False
                     continue
 
             # Adjacency check
             if not check_no_sink_adjacency(board, row, col, size):
                 stdio.writeln(ERRORS['sink_wrong_pos'])
+                valid_setup = False
                 continue
 
             for r in range(size):
@@ -178,9 +190,11 @@ def read_stdin_setup_to_board( board ):
             # Argument Length Check
             if len(line_arguments) < 3:
                 stdio.writeln(ERRORS["few_args"])
+                valid_setup = False
                 continue
             elif len(line_arguments) > 3:
                 stdio.writeln(ERRORS["many_args"])
+                valid_setup = False
                 continue
 
             # Unpack arguments
@@ -189,6 +203,7 @@ def read_stdin_setup_to_board( board ):
 
             if not check_coordinates_range_inclusive(row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
                 stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
+                valid_setup = False
                 continue
 
             board[args["board_height"]-row-1][col] = "x"
@@ -199,9 +214,11 @@ def read_stdin_setup_to_board( board ):
             # Argument Length Check
             if len(line_arguments) < 4:
                 stdio.writeln(ERRORS["few_args"])
+                valid_setup = False
                 continue
             elif len(line_arguments) > 4:
                 stdio.writeln(ERRORS["many_args"])
+                valid_setup = False
                 continue
             
             # Unpack arguments
@@ -215,11 +232,19 @@ def read_stdin_setup_to_board( board ):
             # Check coords
             if not check_coordinates_range_inclusive(row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
                 stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
+                valid_setup = False
                 continue
 
             # position check
             if not check_coordinates_range_inclusive(row, col, 3, args["board_height"]-4, 3, args["board_width"]-4):
                 stdio.writeln(ERRORS["piece_wrong_pos"])
+                valid_setup = False
+                continue
+            
+            # Free field check
+            if board[args["board_height"]-row-1][col] != '':
+                stdio.writeln(ERRORS["field_not_free(r,c)"](row,col))
+                valid_setup = False
                 continue
 
             # Place pieces    
@@ -236,9 +261,11 @@ def read_stdin_setup_to_board( board ):
                 
             else:
                 stdio.writeln(ERRORS["invalid_piece(p)"](piece_type))
+                valid_setup = False
 
         else:
             stdio.writeln(ERRORS["invalid_object(o)"](line_arguments[0]))
+            valid_setup = False
 
 def check_win_conditions( board ):
     return False
@@ -287,12 +314,20 @@ def move_pieces ( board, command, lights_turn ):
 
                 # Check for no obstructions
                 valid = True
+                all_sinks = True
                 obstructed = []
 
                 for i in range(1,size+1):
                     if board[max_row-row+direction[0]*i][col+direction[1]*i]:
                         valid = False
                         obstructed.append(([row-direction[0]*i],[col+direction[1]*i]))
+                    if not board[max_row-row+direction[0]*i][col+direction[1]*i] == "s":
+                        all_sinks = False
+
+                # Sink piece
+                if all_sinks:
+                    board[max_row-row][col] = ''
+                    return
 
                 obstructed.sort(key=lambda x : x[0]+x[1])
                 if not valid: stdio.writeln(ERRORS["field_not_free(r,c)"](obstructed[0][0],obstructed[0][1])); return
@@ -327,6 +362,10 @@ def move_pieces ( board, command, lights_turn ):
         else:
             stdio.writeln(ERRORS["illegal"]+"no piece")
             return
+        
+    else:
+        stdio.writeln(ERRORS["invalid_direction(d)"](move_type))
+        return
 
 
 

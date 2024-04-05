@@ -443,12 +443,15 @@ def move_pieces ( board, command, lights_turn, turn_number ):
 
                     # Flip upright
                     else:
+
                         destination = None
                         destination_coordinates = (0,0)
+
                         if move_type == 'u':
                             if not check_range_inclusive(max_row-row-size,0,max_row): stdio.writeln(ERRORS["beyond_board"]); exit()
                             destination = board[max_row-row-size][col]
                             destination_coordinates = (max_row-row-size,col)
+
                         else:
                             if not check_range_inclusive(max_row-row+1,0,max_row): stdio.writeln(ERRORS["beyond_board"]); exit()
                             destination = board[max_row-row+1][col]
@@ -457,20 +460,81 @@ def move_pieces ( board, command, lights_turn, turn_number ):
                         if destination == "s":
                             for i in range(size):
                                 board[max_row-row-i][col] = ''
+
                         elif destination == '':
                             for i in range(size):
                                 board[max_row-row-i][col] = ''
                             board[destination_coordinates[0]][destination_coordinates[1]] = piece_type_raw
+                            
                         else:
                             stdio.writeln(ERRORS["field_not_free(r,c)"](max_row-destination_coordinates[0],destination_coordinates[1]))
                 
                 # Horizontally aligned
                 else:
-                    pass
-                    
-                    # Flip upright
 
                     # Roll over
+                    if move_type in list("ud"):
+
+                        valid = True
+                        all_sinks = True
+                        obstructions = []
+
+                        # Check if move on board
+                        if not check_range_inclusive(max_row-row+direction[0], 0, max_row): stdio.writeln(ERRORS["beyond_board"]); exit()
+
+                        # Validate destination
+                        for i in range(size):
+                            slot = board[max_row-row+direction[0]][col+i]
+                            if slot != '': valid = False; obstructions.append((row-direction[0],col+i))
+                            elif slot != 's': all_sinks = False
+
+                        # Sink piece
+                        if all_sinks:
+                            for i in range(size):
+                                board[max_row-row][col+i] = ""
+
+                        # Move piece                        
+                        elif valid:
+                            
+                            # move origin and define new piece code
+                            new_code = f"{(row-direction[0])*(max_col+1) + col}"
+                            board[max_row-row+direction[0]][col] = board[max_row-row][col]
+                            board[max_row-row][col] = ''
+
+                            for i in range(1,size):
+                                board[max_row-row][col+i] = ''
+                                board[max_row-row+direction[0]][col+i] = new_code
+
+                    
+                    # Flip upright
+                    else:
+
+                        destination = None
+                        destination_coordinates = (0,0)
+
+                        if move_type == 'r':
+                            if not check_range_inclusive(col+size,0,max_col): stdio.writeln(ERRORS["beyond_board"]); exit()
+                            destination = board[max_row-row][col+size]
+                            destination_coordinates = (max_row-row,col+size)
+
+                        else:
+                            if not check_range_inclusive(col-1,0,max_col): stdio.writeln(ERRORS["beyond_board"]); exit()
+                            destination = board[max_row-row][col-1]
+                            destination_coordinates = (max_row-row,col-1)
+
+                        if destination == "s":
+                            for i in range(size):
+                                board[max_row-row][col+i] = ''
+
+                        elif destination == '':
+                            for i in range(size):
+                                board[max_row-row][col+i] = ''
+                            board[destination_coordinates[0]][destination_coordinates[1]] = piece_type_raw
+                            
+                        else:
+                            stdio.writeln(ERRORS["field_not_free(r,c)"](max_row-destination_coordinates[0],destination_coordinates[1]))
+
+                    
         
         # Moving a sink or a 2x2 block
         elif piece_type == "d":
@@ -492,7 +556,7 @@ def move_pieces ( board, command, lights_turn, turn_number ):
         exit()
 
 
-
+# Game loop
 def main( args ):
 
     # Board setup
@@ -503,7 +567,6 @@ def main( args ):
     lights_turn = True
     turn_counter = 0
 
-    # Gameloop
     while True:
         
         # Keep track of turns

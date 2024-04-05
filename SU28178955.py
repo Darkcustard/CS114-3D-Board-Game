@@ -11,6 +11,8 @@ ERRORS = {
     "piece_not_owned" : "ERROR: Piece does not belong to the correct player",
     "d_second_turn" : "ERROR: Cannot move a 2x2x2 piece on the second move",
     "beyond_board" : "ERROR: Cannot move beyond the board",
+    "repeated_position" : "ERROR: Piece cannot be returned to starting position",
+    "no_sink_moves" : "ERROR: No sink moves left",
 
     "not_on_board(r,c)" : lambda r,c : f"ERROR: Field {r} {c} not on board",
     "invalid_object(o)" : lambda o: f"ERROR: Invalid object type {o}",
@@ -273,7 +275,18 @@ def read_stdin_setup_to_board( board ):
 def check_win_conditions( board ):
     return False
 
-def move_pieces ( board, command, lights_turn, turn_number ):
+def get_sink_size( board, row, col ):
+    
+    max_row = len(board)
+    if row == max_row:
+        return 1
+    return 2 if board[max_row-row-1][col] == 's' else 1
+    
+def copy_board(board):
+    return [row.copy() for row in board]
+    
+
+def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
     
     args = command.split(" ")
     max_row, max_col = (len(board)-1, len(board[0])-1)
@@ -293,6 +306,7 @@ def move_pieces ( board, command, lights_turn, turn_number ):
 
 
     # Moving pieces
+    # Validate direction
     if move_type in list("udlr"):
 
         piece_upright = check_piece_upright(board, row, col) # True if piece occupies 1 slot
@@ -302,7 +316,7 @@ def move_pieces ( board, command, lights_turn, turn_number ):
         piece_code = f"{row*(max_col+1) + col}"
 
         # Check if piece not owned
-        if not (light_team == lights_turn): stdio.writeln(ERRORS["piece_not_owned"]); exit()
+        if not (light_team == lights_turn or piece_type == "s"): stdio.writeln(ERRORS["piece_not_owned"]); exit()
 
         # Moving type A blocks
         if piece_type == "a":
@@ -535,16 +549,111 @@ def move_pieces ( board, command, lights_turn, turn_number ):
                             stdio.writeln(ERRORS["field_not_free(r,c)"](max_row-destination_coordinates[0],destination_coordinates[1]))
 
                     
-        
-        # Moving a sink or a 2x2 block
+        # Moving a 2x2x2 block
         elif piece_type == "d":
-            
+
             # Validate second turn d piece moving
             if turn_number == 2: stdio.writeln(ERRORS["d_second_turn"]); exit()
+            
+            directions = {"u" : (-1,0), "d" : (1,0), "l" : (0,1), "r" : (0,-1)}
+            direction = directions[move_type]
 
+            # Check board
+            valid = True
+            for r in range(2):
+                for c in range(2):
+                    if not check_coordinates_range_inclusive(max_row-row-r+direction[0]*2,col+c+direction[1]*2,0,max_row,0,max_col): valid = False
+
+            if not valid : stdio.writeln(ERRORS["beyond_board"]); exit()
+
+            # Validate destination
+            valid = True
+            all_sinks = True
+
+            destination_origin = (max_row-row+direction[0]*2, col+direction[1]*2)
+            for r in range(2):
+                for c in range(2):
+                    if board[destination_origin[0]-r][destination_origin[1]+c] != '': valid = False
+                    elif board[destination_origin[0]-r][destination_origin[1]+c] != 's': all_sinks = False
+
+            # Sink piece
+            if all_sinks:
+                for r in range(2):
+                    for c in range(2):
+                        board[max_row-row-r][col+c] == ''
+            
+            # Move piece
+            elif valid:
+                
+                # write new code
+                new_code = f"{(row-direction[0]*2)*(max_col+1) + (col+direction[1]*2)}"
+                for r in range(2):
+                    for c in range(2):
+                        board[destination_origin[0]-r][destination_origin[1]+c] = new_code
+                
+                # set new origin
+                board[destination_origin[0]][destination_origin[1]] = piece_type_raw
+
+                # clear old position
+                for r in range(2):
+                    for c in range(2):
+                        board[max_row-row-r][col+c] = ""
+
+            return "d"
 
         elif piece_type == "s":
-            pass
+            
+            # Check correct part of sink is selected
+            valid = True    
+            if row > 0:
+                if board[max_row-row+1][col] == "s" : valid = False
+            if col > 0:
+                if board[max_row-row][col-1] == "s" : valid = False
+            if not valid: stdio.writeln(ERRORS["no_piece(r,c)"](row,col)); exit()
+            
+            # get and validate remaining sink moves
+            team = 'l' if lights_turn else 'd'
+            moves_left = sink_moves[team]
+            if moves_left == 0: stdio.writeln(ERRORS["no_sink_moves"]); exit()
+            else: sink_moves[team] -= 1
+
+
+
+            # Get sink size
+            size = get_sink_size(board,row,col)
+
+            # Check destination
+            directions = {"u" : (-1,0), "d" : (1,0), "l" : (0,-1), "r" : (0,1)}
+            direction = directions[move_type]
+            destination = (max_row-row+direction[0]*size, col+direction[1]*size)
+
+            # Check destination coordinates and occupancy
+            valid = True
+            free = True
+            obstructions = []
+
+            for r in range(size):
+                for c in range(size):
+                    if not check_coordinates_range_inclusive(destination[0]-r,destination[1]+c, 0, max_row, 0, max_col): valid = False
+                    elif board[destination[0]-r][destination[1]+c] != '': free = False; obstructions.appened((destination[0]-r, destination[1]+c))
+
+            # Report errors and exit
+            if not valid : stdio.writeln(ERRORS["beyond_board"]); exit()
+            if not free : stdio.writeln(ERRORS["field_not_free(r,c)"](obstructions[0][0], obstructions[0][1])); exit()
+            
+            # Check if future position will have adjacent sinks
+            future_board = copy_board(board)
+            for r in range(size):
+                for c in range(size):
+                    future_board[max_row-row-r][col+c] = ''
+            if not check_no_sink_adjacency(future_board, destination[0], destination[1], size): stdio.writeln(ERRORS["sink_wrong_pos"]); exit()
+
+            # Clear current location
+            for r in range(size):
+                for c in range(size):
+                    board[max_row-row-r][col+c] = ''
+                    board[destination[0]-r][destination[1]+c] = 's'
+
 
         # Valid piece not at coords given
         else:
@@ -559,6 +668,7 @@ def move_pieces ( board, command, lights_turn, turn_number ):
 # Game loop
 def main( args ):
 
+
     # Board setup
     board = [["" for x in range(args["board_width"])] for y in range(args["board_height"])]
     read_stdin_setup_to_board(board)
@@ -566,27 +676,42 @@ def main( args ):
     # Gameloop var
     lights_turn = True
     turn_counter = 0
+    pre_turn_board = copy_board(board)
+    sink_moves = {"l" : 2, "d" : 2}
 
     while True:
         
         # Keep track of turns
         turn_counter += 1
         if turn_counter == 3: turn_counter = 1; lights_turn = not lights_turn
+        
+        # Track board before first turn
+        if turn_counter == 1:
+            pre_turn_board = copy_board(board)
+
 
         # Read command or end partial game
         try: command = stdio.readLine()
         except: break
 
-        move_pieces(board, command, lights_turn, turn_counter)
+        result = move_pieces(board, command, lights_turn, turn_counter, sink_moves)
+        
+        # Ensure 2x2x2 movement ends turn
+        if result == "d":
+            turn_counter = 2
+
+        # Check board after second turn
+        elif turn_counter == 2:
+            if board == pre_turn_board:
+                stdio.writeln(ERRORS["repeated_position"])
+                exit()
+
         print_board(board)
         
         # Check for win conditions
         if check_win_conditions(board):
             break
         
-
-
-
 # Program Entry point
 if __name__ == "__main__":
     

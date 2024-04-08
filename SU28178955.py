@@ -13,6 +13,9 @@ ERRORS = {
     "beyond_board" : "ERROR: Cannot move beyond the board",
     "repeated_position" : "ERROR: Piece cannot be returned to starting position",
     "no_sink_moves" : "ERROR: No sink moves left",
+    "sink_adjacency" : "ERROR: Sink cannot be next to another sink",
+    "frozen" : "ERROR: Cannot move frozen piece",   
+    "no_freezes" : "ERROR: No freezings left",
 
     "not_on_board(r,c)" : lambda r,c : f"ERROR: Field {r} {c} not on board",
     "invalid_object(o)" : lambda o: f"ERROR: Invalid object type {o}",
@@ -21,6 +24,13 @@ ERRORS = {
     "no_piece(r,c)" : lambda r,c : f"ERROR: No piece on field {r} {c}",
     "field_not_free(r,c)" : lambda r,c : f"ERROR: Field {r} {c} not free"
     
+}
+
+OUTCOMES = {
+        "l_win" : "Light wins!",
+        "l_lose" : "Light loses",
+        "d_win" : "Dark wins!",
+        "d_lose" : "Dark loses",
 }
 
 # Validators
@@ -121,9 +131,9 @@ def read_stdin_setup_to_board( board ):
 
         # Readline or exit if EOF (for testing etc.)
         try: line = stdio.readLine()
-        except: break
+        except: exit()
 
-        line_arguments = line.split(" ")
+        line_arguments = [x for x in line.split(" ") if x != '']
 
 
         if line_arguments[0] == "#":
@@ -138,11 +148,11 @@ def read_stdin_setup_to_board( board ):
             if len(line_arguments) < 4:
                 stdio.writeln(ERRORS["few_args"])
                 valid_setup = False
-                continue
+                exit()
             elif len(line_arguments) > 4:
                 stdio.writeln(ERRORS["many_args"])
                 valid_setup = False
-                continue
+                exit()
 
             # Unpack arguments
             _, size, row, col = line_arguments
@@ -152,38 +162,38 @@ def read_stdin_setup_to_board( board ):
             if size not in [1,2]:
                 stdio.writeln(ERRORS["invalid_piece(p)"](size))
                 valid_setup = False
-                continue
+                exit()
 
             # Coordinate check
             if not check_coordinates_range_inclusive(row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
                 stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
                 valid_setup = False
-                continue
+                exit()
 
             # Size check
             if size == 2:
                 if not check_coordinates_range_inclusive(row, col, 0, args["board_height"]-2, 0, args["board_width"]-2):
                     stdio.writeln(ERRORS["sink_wrong_pos"])
                     valid_setup = False
-                    continue
+                    exit()
 
             # Location check
             if size == 1:
                 if not( (row < 3 or row > args["board_height"]-4) or (col < 3 or col > args["board_width"]-4)):
                     stdio.writeln(ERRORS['sink_wrong_pos'])
                     valid_setup = False
-                    continue
+                    exit()
             else:
                 if not( (row < 2 or row > args["board_height"]-4) or (col < 2 or col > args["board_width"]-4)):
                     stdio.writeln(ERRORS['sink_wrong_pos'])
                     valid_setup = False
-                    continue
+                    exit()
 
             # Adjacency check
             if not check_no_sink_adjacency(board, row, col, size):
-                stdio.writeln(ERRORS['sink_wrong_pos'])
+                stdio.writeln(ERRORS['sink_adjacency'])
                 valid_setup = False
-                continue
+                exit()
 
             for r in range(size):
                 for c in range(size):
@@ -196,11 +206,11 @@ def read_stdin_setup_to_board( board ):
             if len(line_arguments) < 3:
                 stdio.writeln(ERRORS["few_args"])
                 valid_setup = False
-                continue
+                exit()
             elif len(line_arguments) > 3:
                 stdio.writeln(ERRORS["many_args"])
                 valid_setup = False
-                continue
+                exit()
 
             # Unpack arguments
             _, row, col = line_arguments
@@ -209,7 +219,7 @@ def read_stdin_setup_to_board( board ):
             if not check_coordinates_range_inclusive(row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
                 stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
                 valid_setup = False
-                continue
+                exit()
 
             board[args["board_height"]-row-1][col] = "x"
 
@@ -220,11 +230,11 @@ def read_stdin_setup_to_board( board ):
             if len(line_arguments) < 4:
                 stdio.writeln(ERRORS["few_args"])
                 valid_setup = False
-                continue
+                exit()
             elif len(line_arguments) > 4:
                 stdio.writeln(ERRORS["many_args"])
                 valid_setup = False
-                continue
+                exit()
             
             # Unpack arguments
             team, piece_type, row, col = line_arguments
@@ -238,19 +248,19 @@ def read_stdin_setup_to_board( board ):
             if not check_coordinates_range_inclusive(row, col, 0, args["board_height"]-1, 0, args["board_width"]-1):
                 stdio.writeln(ERRORS['not_on_board(r,c)'](row,col))
                 valid_setup = False
-                continue
+                exit()
 
             # position check
             if not check_coordinates_range_inclusive(row, col, 3, args["board_height"]-4, 3, args["board_width"]-4):
                 stdio.writeln(ERRORS["piece_wrong_pos"])
                 valid_setup = False
-                continue
+                exit()
             
             # Free field check
             if board[args["board_height"]-row-1][col] != '':
                 stdio.writeln(ERRORS["field_not_free(r,c)"](row,col))
                 valid_setup = False
-                continue
+                exit()
 
             # Place pieces    
             if piece_type in ['a','b','c']:
@@ -272,8 +282,16 @@ def read_stdin_setup_to_board( board ):
             stdio.writeln(ERRORS["invalid_object(o)"](line_arguments[0]))
             valid_setup = False
 
-def check_win_conditions( board ):
-    return False
+def check_win_conditions( board, player_scores, freezes, sink_moves ):
+    
+    # Win via points
+    if player_scores["l"] >= 4:
+        stdio.writeln(OUTCOMES["l_win"])
+        exit()
+    elif player_scores["d"] >= 4:
+        stdio.writeln(OUTCOMES["d_win"])
+        exit()
+
 
 def get_sink_size( board, row, col ):
     
@@ -285,24 +303,24 @@ def get_sink_size( board, row, col ):
 def copy_board(board):
     return [row.copy() for row in board]
     
-
-def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
+def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_pieces, freezes ):
     
-    args = command.split(" ")
+    args = [x for x in command.split(" ") if x != '']
     max_row, max_col = (len(board)-1, len(board[0])-1)
 
     # Validate arguments
     if len(args) < 3:
         stdio.writeln(ERRORS["few_args"])
-        return 
+        exit() 
     elif len(args) > 3:
         stdio.writeln(ERRORS["many_args"])
-        return
+        exit()
     
     # Datatype and range checks
     try: row, col, move_type = (int(args[0]), int(args[1]), args[2])
-    except: stdio.writeln(ERRORS["illegal"]); return
-    if not check_coordinates_range_inclusive(row, col, 0, max_row, 0, max_col): stdio.writeln(ERRORS["not_on_board(r,c)"](row,col)); return
+    except: stdio.writeln(ERRORS["illegal"]); exit()
+    if not check_coordinates_range_inclusive(row, col, 0, max_row, 0, max_col): stdio.writeln(ERRORS["not_on_board(r,c)"](row,col)); exit()
+    if board[max_row-row][col] == '': stdio.writeln(ERRORS["no_piece(r,c)"](row,col)); exit()
 
 
     # Moving pieces
@@ -318,6 +336,16 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
         # Check if piece not owned
         if not (light_team == lights_turn or piece_type == "s"): stdio.writeln(ERRORS["piece_not_owned"]); exit()
 
+
+        # Check if piece is frozen
+        frozen = False
+        for r, c, _, _ in frozen_pieces:
+            if r == row and c == col:
+                frozen = True
+
+        if frozen: stdio.writeln(ERRORS['frozen']); exit()
+
+
         # Moving type A blocks
         if piece_type == "a":
             
@@ -331,16 +359,19 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
             # Check for obstructions/sinks
             if board[max_row-row+direction[0]][col+direction[1]] == "s":
                 board[max_row-row][col] = ""
+                return ['s',1]
             
             # Board space is occupied
             elif board[max_row-row+direction[0]][col+direction[1]] != '':
                 stdio.writeln(ERRORS["field_not_free(r,c)"](max_row-row+direction[0],col+direction[1]))
-                return
+                exit()
             
             # Move piece
             else:
                 board[max_row-row+direction[0]][col+direction[1]] = piece_type_raw
                 board[max_row-row][col] = ""
+            
+            return [None]
 
         # Moving B or C blocks
         elif piece_type in list("bc"):
@@ -370,7 +401,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
                 # Sink piece
                 if all_sinks:
                     board[max_row-row][col] = ''
-                    return
+                    return ['s', 2 if piece_type == "b" else 3]
 
                 obstructed.sort(key=lambda x : x[0]+x[1])
                 if not valid: stdio.writeln(ERRORS["field_not_free(r,c)"](obstructed[0][0],obstructed[0][1])); exit()
@@ -436,6 +467,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
                             # Clear piece and connected codes
                             for i in range(size):
                                 board[max_row-row-i][col] = ""
+                                return ['s', 2 if piece_type == "b" else 3]
                         
                         # Move piece
                         elif valid:
@@ -474,6 +506,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
                         if destination == "s":
                             for i in range(size):
                                 board[max_row-row-i][col] = ''
+                            return ['s', 2 if piece_type == "b" else 3]
 
                         elif destination == '':
                             for i in range(size):
@@ -506,6 +539,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
                         if all_sinks:
                             for i in range(size):
                                 board[max_row-row][col+i] = ""
+                            return ['s', 2 if piece_type == "b" else 3]
 
                         # Move piece                        
                         elif valid:
@@ -539,6 +573,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
                         if destination == "s":
                             for i in range(size):
                                 board[max_row-row][col+i] = ''
+                            return ['s', 2 if piece_type == "b" else 3]
 
                         elif destination == '':
                             for i in range(size):
@@ -548,6 +583,8 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
                         else:
                             stdio.writeln(ERRORS["field_not_free(r,c)"](max_row-destination_coordinates[0],destination_coordinates[1]))
 
+            return [None]
+
                     
         # Moving a 2x2x2 block
         elif piece_type == "d":
@@ -555,7 +592,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
             # Validate second turn d piece moving
             if turn_number == 2: stdio.writeln(ERRORS["d_second_turn"]); exit()
             
-            directions = {"u" : (-1,0), "d" : (1,0), "l" : (0,1), "r" : (0,-1)}
+            directions = {"u" : (-1,0), "d" : (1,0), "l" : (0,-1), "r" : (0,1)}
             direction = directions[move_type]
 
             # Check board
@@ -581,6 +618,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
                 for r in range(2):
                     for c in range(2):
                         board[max_row-row-r][col+c] == ''
+                return ['s',4]
             
             # Move piece
             elif valid:
@@ -599,7 +637,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
                     for c in range(2):
                         board[max_row-row-r][col+c] = ""
 
-            return "d"
+            return ["d"]
 
         elif piece_type == "s":
             
@@ -646,7 +684,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
             for r in range(size):
                 for c in range(size):
                     future_board[max_row-row-r][col+c] = ''
-            if not check_no_sink_adjacency(future_board, destination[0], destination[1], size): stdio.writeln(ERRORS["sink_wrong_pos"]); exit()
+            if not check_no_sink_adjacency(future_board, destination[0], destination[1], size): stdio.writeln(ERRORS["sink_adjacency"]); exit()
 
             # Clear current location
             for r in range(size):
@@ -654,12 +692,38 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves ):
                     board[max_row-row-r][col+c] = ''
                     board[destination[0]-r][destination[1]+c] = 's'
 
+            return [None]
+
 
         # Valid piece not at coords given
         else:
             stdio.writeln(ERRORS["no_piece(r,c)"](row,col))
             exit()
         
+    elif move_type == "f":
+
+        # Check if any freezes remaining
+        if freezes["l" if lights_turn else "d"] <= 0: stdio.writeln(ERRORS['no_freezes']); exit()
+
+        # Check if piece at coordinates
+        piece_type = board[max_row-row][col]
+
+        # sink?
+        if piece_type == "s": stdio.writeln(ERRORS["piece_not_owned"]); exit()
+        
+        # get team
+        light_team = (lambda x: True if x.lower() == x else False)(board[max_row-row][col]) # True if piece owned by light team
+        
+        if light_team != lights_turn:
+            freezes["l" if lights_turn else "d"] -= 1
+            return ( "f", row, col, light_team )
+
+        else:
+            stdio.writeln(ERRORS["piece_not_owned"])
+            exit()
+
+
+
     else:
         stdio.writeln(ERRORS["invalid_direction(d)"](move_type))
         exit()
@@ -678,6 +742,10 @@ def main( args ):
     turn_counter = 0
     pre_turn_board = copy_board(board)
     sink_moves = {"l" : 2, "d" : 2}
+    freezes = {"l" : 2, "d" : 2}
+    player_scores = {"l" : 0, "d" : 0}
+
+    frozen_pieces = [] # FMT (row, col, owned_by_light?, counter)
 
     while True:
         
@@ -694,23 +762,38 @@ def main( args ):
         try: command = stdio.readLine()
         except: break
 
-        result = move_pieces(board, command, lights_turn, turn_counter, sink_moves)
+        result = move_pieces(board, command, lights_turn, turn_counter, sink_moves, frozen_pieces, freezes)
         
         # Ensure 2x2x2 movement ends turn
-        if result == "d":
+        if result[0] == "d":
             turn_counter = 2
+
+        # Add frozen piece to tracker
+        elif result[0] == "f":
+            frozen_pieces.append((result[1], result[2], result[3], 2))
+            turn_counter -= 1
+            continue
+
+        elif result[0] == "s":
+            player_scores["l" if lights_turn else "d"] += result[1]
 
         # Check board after second turn
         elif turn_counter == 2:
             if board == pre_turn_board:
                 stdio.writeln(ERRORS["repeated_position"])
                 exit()
-
-        print_board(board)
         
-        # Check for win conditions
-        if check_win_conditions(board):
-            break
+        print_board(board)
+        check_win_conditions(board, player_scores, freezes, sink_moves)
+        
+
+        # Update frozen pieces
+        for frozen_piece in frozen_pieces:
+            if frozen_piece[2] == lights_turn:
+                frozen_piece[3] -= 1
+
+            if frozen_piece[3] == 0:
+                frozen_pieces.remove(frozen_piece)
         
 # Program Entry point
 if __name__ == "__main__":

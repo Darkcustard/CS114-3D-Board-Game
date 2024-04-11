@@ -316,10 +316,8 @@ def check_for_moves(board, lights_turn, turn_number, sink_moves, frozen_pieces, 
     # For each piece bruteforce possible moves
     for row, col in owned_piece_locations:
         for move in possible_moves:
-            try:
-                if move_pieces(board,f"{max_row-row} {col} {move}", lights_turn, turn_number, sink_moves, frozen_pieces, freezes, report_actions_left=True): possible += 1
-            except:
-                continue
+            if move_pieces(board,f"{max_row-row} {col} {move}", lights_turn, turn_number, sink_moves, frozen_pieces, freezes, report_actions_left=True): possible += 1
+
 
     # Allow for possible sink shifting (CHECK IF THIS COUNTS AS A MOVE)
     if sinks_present: possible += sink_moves["l" if lights_turn else "d"]
@@ -345,22 +343,25 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
 
     # Validate arguments
     if len(args) < 3:
-        if not report_actions_left : stdio.writeln(ERRORS["few_args"])
-        exit() 
+        if not report_actions_left : stdio.writeln(ERRORS["few_args"]); exit()
+        else: return False 
     elif len(args) > 3:
-        if not report_actions_left : stdio.writeln(ERRORS["many_args"])
-        exit()
-    
+        if not report_actions_left : stdio.writeln(ERRORS["many_args"]); exit()
+        else: return False
+
     # Datatype and range checks
     try: row, col, move_type = (int(args[0]), int(args[1]), args[2])
     except: 
         if not report_actions_left : stdio.writeln(ERRORS["illegal"]); exit()
+        else: return False
 
     if not check_coordinates_range_inclusive(row, col, 0, max_row, 0, max_col): 
         if not report_actions_left : stdio.writeln(ERRORS["not_on_board(r,c)"](row,col)); exit()
+        else: return False
 
     if board[max_row-row][col] == '': 
         if not report_actions_left : stdio.writeln(ERRORS["no_piece(r,c)"](row,col)); exit()
+        else: return False
 
     # If player refers to a coordinate
     if sum([ (lambda x : 0 if x in digits else 1 )(char) for char in str(board[max_row-row][col])]) == 0:
@@ -382,6 +383,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
         # Check if piece not owned
         if not (light_team == lights_turn or piece_type == "s"):
             if not report_actions_left : stdio.writeln(ERRORS["piece_not_owned"]); exit()
+            else: return False
 
 
         # Check if piece is frozen
@@ -392,6 +394,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
 
         if frozen: 
             if not report_actions_left : stdio.writeln(ERRORS['frozen']); exit()
+            else: return False
 
 
         # Moving type A blocks
@@ -404,6 +407,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
             # Check out of bounds
             if not check_coordinates_range_inclusive(max_row-row+direction[0],col+direction[1],0,max_row,0,max_col): 
                 if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                else: return False
             
             # Check for obstructions/sinks
             if board[max_row-row+direction[0]][col+direction[1]] == "s":
@@ -415,8 +419,9 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
             
             # Board space is occupied
             elif board[max_row-row+direction[0]][col+direction[1]] != '':
-                if not report_actions_left : stdio.writeln(ERRORS["field_not_free(r,c)"](max_row-row+direction[0],col+direction[1]))
-                exit()
+                if not report_actions_left : stdio.writeln(ERRORS["field_not_free(r,c)"](row+direction[0],col+direction[1])); exit()
+                else: return False
+                
             
             # Move piece
             elif report_actions_left:
@@ -444,6 +449,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
 
                 if not check_coordinates_range_inclusive(max_row-row+direction[0]*size, col+direction[1]*size,0, max_row, 0, max_col): 
                     if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                    else: return False
 
                 # Check for no obstructions
                 valid = True
@@ -468,6 +474,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
                 obstructed.sort(key=lambda x : x[0]+x[1])
                 if not valid: 
                     if not report_actions_left : stdio.writeln(ERRORS["field_not_free(r,c)"](obstructed[0][0],obstructed[0][1])); exit()
+                    else: return False
 
                 if report_actions_left:
                     return True
@@ -520,6 +527,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
                         # Check coordinates
                         if not check_range_inclusive(col+direction[1],0,max_col):
                             if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                            else: return False
 
                         # Check destination
                         for i in range(size):
@@ -570,6 +578,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
                         if move_type == 'u':
                             if not check_range_inclusive(max_row-row-size,0,max_row): 
                                 if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                                else: return False
 
                             destination = board[max_row-row-size][col]
                             destination_coordinates = (max_row-row-size,col)
@@ -577,6 +586,8 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
                         else:
                             if not check_range_inclusive(max_row-row+1,0,max_row): 
                                 if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                                else: return False
+
                             destination = board[max_row-row+1][col]
                             destination_coordinates = (max_row-row+1,col)
 
@@ -615,6 +626,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
                         # Check if move on board
                         if not check_range_inclusive(max_row-row+direction[0], 0, max_row): 
                             if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                            else: return False
 
                         # Validate destination
                         for i in range(size):
@@ -656,6 +668,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
                         if move_type == 'r':
                             if not check_range_inclusive(col+size,0,max_col): 
                                 if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                                else: return False
 
                             destination = board[max_row-row][col+size]
                             destination_coordinates = (max_row-row,col+size)
@@ -663,6 +676,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
                         else:
                             if not check_range_inclusive(col-1,0,max_col): 
                                 if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                                else: return False
 
                             destination = board[max_row-row][col-1]
                             destination_coordinates = (max_row-row,col-1)
@@ -699,6 +713,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
             # Validate second turn d piece moving
             if turn_number == 2: 
                 if not report_actions_left : stdio.writeln(ERRORS["d_second_turn"]); exit()
+                else: return False
             
             directions = {"u" : (-1,0), "d" : (1,0), "l" : (0,-1), "r" : (0,1)}
             direction = directions[move_type]
@@ -711,6 +726,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
 
             if not valid : 
                 if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                else: return False
 
             # Validate destination
             valid = True
@@ -772,6 +788,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
             moves_left = sink_moves[team]
             if moves_left == 0: 
                 if not report_actions_left : stdio.writeln(ERRORS["no_sink_moves"]); exit()
+                else: return False
 
             else: sink_moves[team] -= 1
 
@@ -796,9 +813,11 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
             # Report errors and exit
             if not valid : 
                 if not report_actions_left : stdio.writeln(ERRORS["beyond_board"]); exit()
+                else: return False
 
             if not free : 
                 if not report_actions_left : stdio.writeln(ERRORS["field_not_free(r,c)"](obstructions[0][0], obstructions[0][1])); exit()
+                else: return False
             
             # Check if future position will have adjacent sinks
             future_board = copy_board(board)
@@ -807,6 +826,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
                     future_board[max_row-row-r][col+c] = ''
             if not check_no_sink_adjacency(future_board, destination[0], destination[1], size): 
                 if not report_actions_left : stdio.writeln(ERRORS["sink_adjacency"]); exit()
+                else: return False
 
             # Clear current location
             if report_actions_left:
@@ -822,14 +842,15 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
 
         # Valid piece not at coords given
         else:
-            if not report_actions_left : stdio.writeln(ERRORS["no_piece(r,c)"](row,col))
-            exit()
+            if not report_actions_left : stdio.writeln(ERRORS["no_piece(r,c)"](row,col)); exit()
+            else: return False
         
     elif move_type == "f":
 
         # Check if any freezes remaining
         if freezes["l" if lights_turn else "d"] <= 0: 
             if not report_actions_left : stdio.writeln(ERRORS['no_freezes']); exit()
+            else: return False
 
         # Check if piece at coordinates
         piece_type = board[max_row-row][col]
@@ -837,6 +858,7 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
         # sink?
         if piece_type == "s": 
             if not report_actions_left : stdio.writeln(ERRORS["piece_not_owned"]); exit()
+            else: return False
         
         # get team
         light_team = (lambda x: True if x.lower() == x else False)(board[max_row-row][col]) # True if piece owned by light team
@@ -846,14 +868,14 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
             return ( "f", row, col, light_team )
 
         else:
-            if not report_actions_left : stdio.writeln(ERRORS["piece_not_owned"])
-            exit()
+            if not report_actions_left : stdio.writeln(ERRORS["piece_not_owned"]); exit()
+            else: return False
 
 
 
     else:
-        if not report_actions_left : stdio.writeln(ERRORS["invalid_direction(d)"](move_type))
-        exit()
+        if not report_actions_left : stdio.writeln(ERRORS["invalid_direction(d)"](move_type)); exit()
+        else: return False
 
 
 # Game loop
@@ -888,7 +910,7 @@ def main( args ):
         check_for_moves(board, lights_turn, turn_counter, sink_moves, frozen_pieces, freezes)
         # Read command or end partial game
 
-        if not stdio.hasNextLine():
+        if stdio.hasNextLine():
             command = stdio.readLine()
         else:
             quit()
@@ -916,9 +938,9 @@ def main( args ):
                 stdio.writeln(ERRORS["repeated_position"])
                 exit()
         
-        check_win_conditions(board, player_scores, freezes, sink_moves)
         print_board(board)
-
+        check_win_conditions(board, player_scores, freezes, sink_moves)
+        
         
 
         # Update frozen pieces

@@ -1,8 +1,7 @@
 import sys
-
 import stddraw
 import stdio
-import random
+
 
 ERRORS = {
     "illegal" : "ERROR: Illegal argument",
@@ -34,6 +33,31 @@ OUTCOMES = {
         "d_win" : "Dark wins!",
         "d_lose" : "Dark loses",
 }
+
+# Util
+def dot(a,b):
+    return sum([a[i]*b[i] for i in range(len(a))])
+
+def transpose(a):
+    resultant = [[0 for i in range(len(a))] for i in range(len(a[0]))]
+    
+    for col in range(len(a[0])):
+        for row in range(len(a)):
+            resultant[col][row] = a[row][col]
+
+    return resultant
+
+def matmult(a,b):
+
+    # Initialize resultant array
+    resultant = [[0 for i in range(len(b[0]))] for i in range(len(a))]
+    tb = transpose(b)
+
+    for r in range(len(resultant)):
+        for c in range(len(resultant[0])):
+            resultant[r][c] = dot(a[r],tb[c])
+
+    return resultant
 
 # Validators
 def check_range_inclusive(x , lower, upper):
@@ -879,6 +903,10 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
         if not report_actions_left : stdio.writeln(ERRORS["invalid_direction(d)"](move_type)); exit()
         else: return False
 
+
+# Render
+
+
 # Game loop
 def main_nogui( args ):
 
@@ -963,19 +991,17 @@ def main_gui( args ):
     stddraw.setCanvasSize(RESOLUTION[0], RESOLUTION[1])
     stddraw.setXscale(-1,1)
     stddraw.setYscale(-1,1)
-    stddraw.setPenRadius(0.001)
-    
+
 
     while True:
         
         # BG
-        stddraw.clear()
-        
-        stddraw.filledCircle(random.random()*2-1,random.random()*2-1,1)
+        stddraw.clear(stddraw.BLUE)
+
         
         
         # Update
-        stddraw.show(0.0)
+        stddraw.show(200)
       
 # Program Entry point
 if __name__ == "__main__":

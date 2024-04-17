@@ -1,6 +1,8 @@
-
-import stdio
 import sys
+
+import stddraw
+import stdio
+import random
 
 ERRORS = {
     "illegal" : "ERROR: Illegal argument",
@@ -877,10 +879,8 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
         if not report_actions_left : stdio.writeln(ERRORS["invalid_direction(d)"](move_type)); exit()
         else: return False
 
-
 # Game loop
-def main( args ):
-
+def main_nogui( args ):
 
     # Board setup
     board = [["" for x in range(args["board_width"])] for y in range(args["board_height"])]
@@ -895,8 +895,10 @@ def main( args ):
     player_scores = {"l" : 0, "d" : 0}
 
     frozen_pieces = [] # FMT (row, col, owned_by_light?, counter)
+    
 
     while True:
+        
         
         # Keep track of turns
         turn_counter += 1
@@ -950,7 +952,31 @@ def main( args ):
 
             if frozen_piece[3] == 0:
                 frozen_pieces.remove(frozen_piece)
+
+def main_gui( args ):
+    
+
+    # Const
+    RESOLUTION = (1000,1000)
+
+    # Configure Window
+    stddraw.setCanvasSize(RESOLUTION[0], RESOLUTION[1])
+    stddraw.setXscale(-1,1)
+    stddraw.setYscale(-1,1)
+    stddraw.setPenRadius(0.001)
+    
+
+    while True:
         
+        # BG
+        stddraw.clear()
+        
+        stddraw.filledCircle(random.random()*2-1,random.random()*2-1,1)
+        
+        
+        # Update
+        stddraw.show(0.0)
+      
 # Program Entry point
 if __name__ == "__main__":
     
@@ -979,6 +1005,7 @@ if __name__ == "__main__":
                 stdio.writeln(ERRORS['illegal'])
                 valid_args = False
 
+        # Illegal Arguments
         except:
             stdio.writeln(ERRORS['illegal'])
             valid_args = False
@@ -986,4 +1013,7 @@ if __name__ == "__main__":
 
         # Check validation and start
         if valid_args:
-            main(args)
+            if args["gui"] == 0:
+                main_nogui(args)
+            else:
+                main_gui(args)

@@ -2,6 +2,8 @@ import sys
 import stddraw
 import stdio
 
+from math import cos, sin, tan, pi, atan
+
 
 ERRORS = {
     "illegal" : "ERROR: Illegal argument",
@@ -34,6 +36,21 @@ OUTCOMES = {
         "d_lose" : "Dark loses",
 }
 
+GEOMETRY = {
+    'get_prism_points(x,y,z,l,w,h)' : lambda x,y,z,l,w,h : [ (x+point[0]*l, y+point[1]*w, z+point[2]*h) for point in [
+        (0,0,0),(0,1,0),(0,0,1),(0,1,1),
+        (1,0,0),(1,1,0),(1,0,1),(1,1,1),
+    ]],
+
+    'prism_edge_table' : [
+        (0,1),(0,2),(3,1),(3,2),
+        (4,5),(4,6),(7,5),(7,6),
+        (0,4),(1,5),(2,6),(3,7),
+    ]
+
+
+}
+
 # Util
 def dot(a,b):
     return sum([a[i]*b[i] for i in range(len(a))])
@@ -58,6 +75,39 @@ def matmult(a,b):
             resultant[r][c] = dot(a[r],tb[c])
 
     return resultant
+
+def global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll):
+
+    # X Forward Y Right Z up
+
+    # Make coordinates relative to camera
+    rx, ry, rz = (x-cx, y-cy, z-cz)
+
+    # define Reverse angle transform
+    yaw_transform = [[cos(-yaw), -sin(-yaw), 0],[sin(-yaw),cos(-yaw),0],[0,0,1]]
+    pitch_transform = [[cos(-pitch),0,sin(-pitch)],[0,1,0],[-sin(-pitch),0,cos(-pitch)]]
+    roll_transform = [[1,0,0],[0,cos(-roll),-sin(-roll)],[0,sin(-roll),cos(-roll)]]
+    transform = matmult(matmult(yaw_transform, pitch_transform), roll_transform)
+    
+    # Apply transform and return
+    new_coordinates = transpose(matmult(transform, transpose([[rx,ry,rz]])))[0]
+    return (new_coordinates[0], new_coordinates[1], new_coordinates[2])
+
+def perspective_transform(x,y,z,cx,cy,cz,pitch,yaw,roll,fov=2/3*pi):
+    tx, ty, tz = global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll)
+    return (ty/(tx*tan(fov/2)), tz/(tx*tan(fov/2)))
+
+# Draw
+def draw_wireframe_prism(points, cx,cy,cz, cpitch, cyaw, croll):
+
+    projected = [perspective_transform(point[0],point[1],point[2],cx,cy,cz,cpitch,cyaw,croll) for point in points]
+
+    for edge in GEOMETRY["prism_edge_table"]:
+        x1,y1 = projected[edge[0]]
+        x2,y2 = projected[edge[1]]
+        stddraw.line(x1,y1,x2,y2)
+
+
 
 # Validators
 def check_range_inclusive(x , lower, upper):
@@ -992,16 +1042,30 @@ def main_gui( args ):
     stddraw.setXscale(-1,1)
     stddraw.setYscale(-1,1)
 
+    cx, cy, cz = (0,0,0)
+    cpitch, cyaw, croll = (0.0,0.0,0.0)
+
+    cube_points = GEOMETRY["get_prism_points(x,y,z,l,w,h)"](1,0,0,1,1,1)
+    
+
+    print(cube_points)
 
     while True:
         
         # BG
-        stddraw.clear(stddraw.BLUE)
+        stddraw.clear()
+        cz += 0.001
+        cy += 0.001
+
+        stddraw.setPenColor(stddraw.BLACK)
+        draw_wireframe_prism(cube_points, cx,cy,cz,cpitch,cyaw,croll)
 
         
+
+
         
         # Update
-        stddraw.show(200)
+        stddraw.show(0)
       
 # Program Entry point
 if __name__ == "__main__":

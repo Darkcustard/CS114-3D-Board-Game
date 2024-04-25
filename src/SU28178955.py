@@ -42,16 +42,42 @@ GEOMETRY = {
         (1,0,0),(1,1,0),(1,0,1),(1,1,1),
     ]],
 
+    'prism_triangle_table' : [
+        (0,2,1),(1,2,3), # Front
+        (1,3,5),(5,3,7), # Right
+        (5,7,4),(4,7,6), # Back
+        (4,6,0),(0,6,2), # Left
+        (2,6,3),(3,6,7), # Top
+        (4,0,5),(5,0,1), # Bottom
+
+
+    ],
+
     'prism_edge_table' : [
         (0,1),(0,2),(3,1),(3,2),
         (4,5),(4,6),(7,5),(7,6),
         (0,4),(1,5),(2,6),(3,7),
+    ],
+
+    'get_plane_points(x,y,z,l,w)' : lambda x,y,z,l,w : [ (x+point[0]*l,y+point[1]*w,z) for point in [
+        (0,0,0),(1,0,0),(0,1,0),(1,1,0)
+    ]],
+
+    'plane_triangle_table' : [
+        (0,1,2),(2,1,3)
     ]
 
 
 }
 
 # Util
+def clamp(x,xmin,xmax):
+    if x < xmin:
+        return xmin
+    if x > xmax:
+        return xmax
+    return x
+
 def dot(a,b):
     return sum([a[i]*b[i] for i in range(len(a))])
 
@@ -95,17 +121,50 @@ def global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll):
 
 def perspective_transform(x,y,z,cx,cy,cz,pitch,yaw,roll,fov=2/3*pi):
     tx, ty, tz = global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll)
-    return (ty/(tx*tan(fov/2)), tz/(tx*tan(fov/2)))
+    px, py = (ty/(tx*tan(fov/2)), tz/(tx*tan(fov/2)))
+    return (clamp(px,-2,2), clamp(py,-2,2))
 
-# Draw
-def draw_wireframe_prism(points, cx,cy,cz, cpitch, cyaw, croll):
+def points_to_faces(points, triangle_table):
 
-    projected = [perspective_transform(point[0],point[1],point[2],cx,cy,cz,cpitch,cyaw,croll) for point in points]
+    faces = []
 
-    for edge in GEOMETRY["prism_edge_table"]:
-        x1,y1 = projected[edge[0]]
-        x2,y2 = projected[edge[1]]
-        stddraw.line(x1,y1,x2,y2)
+    for a,b,c in triangle_table:
+        faces.append((points[a],points[b],points[c],))
+
+    return faces
+
+def faces_to_triangles(faces, cx,cy,cz,cpitch,cyaw,croll):
+
+    triangles = []
+
+    for face in faces:
+
+        a = perspective_transform(face[0][0],face[0][1],face[0][2],cx,cy,cz,cpitch,cyaw,croll)
+        b = perspective_transform(face[1][0],face[1][1],face[1][2],cx,cy,cz,cpitch,cyaw,croll)
+        c = perspective_transform(face[2][0],face[2][1],face[2][2],cx,cy,cz,cpitch,cyaw,croll)
+        triangles.append((a,b,c))
+
+    return triangles
+
+def draw_prism(points, cx,cy,cz, cpitch,cyaw,croll):
+
+    faces = points_to_faces(points, GEOMETRY["prism_triangle_table"])
+    triangles = faces_to_triangles(faces,cx,cy,cz,cpitch,cyaw,croll)
+    
+    for triangle in triangles:
+        x = [p[0] for p in triangle]
+        y = [p[1] for p in triangle]
+        stddraw.filledPolygon(x,y)
+
+def draw_plane(points, cx,cy,cz,cpitch,cyaw,croll):
+
+    faces = points_to_faces(points, GEOMETRY["plane_triangle_table"])
+    triangles = faces_to_triangles(faces,cx,cy,cz,cpitch,cyaw,croll)
+    
+    for triangle in triangles:
+        x = [p[0] for p in triangle]
+        y = [p[1] for p in triangle]
+        stddraw.filledPolygon(x,y)
 
 
 
@@ -1042,23 +1101,22 @@ def main_gui( args ):
     stddraw.setXscale(-1,1)
     stddraw.setYscale(-1,1)
 
-    cx, cy, cz = (0,0,0)
-    cpitch, cyaw, croll = (0.0,0.0,0.0)
+    cx, cy, cz = (-1,4,4)
+    cpitch, cyaw, croll = (0.5,0.0,0.0)
 
-    cube_points = GEOMETRY["get_prism_points(x,y,z,l,w,h)"](1,0,0,1,1,1)
+    cube_points = GEOMETRY["get_prism_points(x,y,z,l,w,h)"](1,2,0,1,1,1)
+    floor_points = GEOMETRY["get_plane_points(x,y,z,l,w)"](1,0,0,5,5)
     
-
-    print(cube_points)
-
     while True:
-        
         # BG
         stddraw.clear()
-        cz += 0.001
-        cy += 0.001
+        cz -= 0.001
 
-        stddraw.setPenColor(stddraw.BLACK)
-        draw_wireframe_prism(cube_points, cx,cy,cz,cpitch,cyaw,croll)
+        stddraw.setPenColor(stddraw.MAGENTA)
+        draw_plane(floor_points,cx,cy,cz,cpitch,cyaw,croll)
+
+        stddraw.setPenColor(stddraw.GRAY)
+        draw_prism(cube_points, cx,cy,cz,cpitch,cyaw,croll)
 
         
 

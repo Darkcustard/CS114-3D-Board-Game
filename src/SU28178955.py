@@ -81,6 +81,16 @@ def clamp(x,xmin,xmax):
 def dot(a,b):
     return sum([a[i]*b[i] for i in range(len(a))])
 
+def normalized_dot(a,b):
+    length = (a[0]**2+a[1]**2+a[2]**2)**0.5*(b[0]**2+b[1]**2+b[2]**2)**0.5
+    return dot(a,b)/length
+
+def cross(a,b):
+
+    x1,y1,z1 = a
+    x2,y2,z2 = b
+    return (y1*z2-z1*y2, z1*x2-x1*z2, x1*y2-y1*x2)
+
 def transpose(a):
     resultant = [[0 for i in range(len(a))] for i in range(len(a[0]))]
     
@@ -102,6 +112,18 @@ def matmult(a,b):
 
     return resultant
 
+def rotate_around_origin(x,y,z,pitch,yaw,roll):
+
+    # define angle transform
+    yaw_transform = [[cos(yaw), -sin(yaw), 0],[sin(yaw),cos(yaw),0],[0,0,1]]
+    pitch_transform = [[cos(pitch),0,sin(pitch)],[0,1,0],[sin(pitch),0,cos(pitch)]]
+    roll_transform = [[1,0,0],[0,cos(roll),-sin(roll)],[0,sin(roll),cos(roll)]]
+    transform = matmult(matmult(yaw_transform, pitch_transform), roll_transform)
+    
+    # Apply transform and return
+    new_coordinates = transpose(matmult(transform, transpose([[x,y,z]])))[0]
+    return (new_coordinates[0], new_coordinates[1], new_coordinates[2])
+
 def global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll):
 
     # X Forward Y Right Z up
@@ -122,50 +144,53 @@ def global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll):
 def perspective_transform(x,y,z,cx,cy,cz,pitch,yaw,roll,fov=2/3*pi):
     tx, ty, tz = global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll)
     px, py = (ty/(tx*tan(fov/2)), tz/(tx*tan(fov/2)))
-    return (clamp(px,-2,2), clamp(py,-2,2))
+    return ((clamp(px,-2,2), clamp(py,-2,2)),tx)
+
 
 def points_to_faces(points, triangle_table):
 
     faces = []
 
     for a,b,c in triangle_table:
-        faces.append((points[a],points[b],points[c],))
+        faces.append((points[a],points[b],points[c]))
 
     return faces
 
-def faces_to_triangles(faces, cx,cy,cz,cpitch,cyaw,croll):
+def faces_to_triangles(faces,color, cx,cy,cz,cpitch,cyaw,croll):
 
     triangles = []
 
     for face in faces:
 
-        a = perspective_transform(face[0][0],face[0][1],face[0][2],cx,cy,cz,cpitch,cyaw,croll)
-        b = perspective_transform(face[1][0],face[1][1],face[1][2],cx,cy,cz,cpitch,cyaw,croll)
-        c = perspective_transform(face[2][0],face[2][1],face[2][2],cx,cy,cz,cpitch,cyaw,croll)
-        triangles.append((a,b,c))
+        midx = (face[0][0] + face[1][0] + face[2][0])/3
+        midy = (face[0][1] + face[1][1] + face[2][1])/3
+        midz = (face[0][2] + face[1][2] + face[2][2])/3
+
+        c1 = (face[1][0]-face[0][0],face[1][1]-face[0][1],face[1][2]-face[0][2])
+        c2 = (face[2][0]-face[0][0],face[2][1]-face[0][1],face[2][2]-face[0][2])
+
+        normal = cross(c1,c2)   
+        to_face = (midx-cx,midy-cy,midz-cz)
+        dot_product = -normalized_dot(normal,to_face)
+
+        if dot_product < 0:
+            continue
+
+        a,d1 = perspective_transform(face[0][0],face[0][1],face[0][2],cx,cy,cz,cpitch,cyaw,croll)
+        b,d2 = perspective_transform(face[1][0],face[1][1],face[1][2],cx,cy,cz,cpitch,cyaw,croll)
+        c,d3 = perspective_transform(face[2][0],face[2][1],face[2][2],cx,cy,cz,cpitch,cyaw,croll)
+
+        d = (d1+d2+d3)/3
+        
+        triangles.append((a,b,c,d,stddraw.color.Color(round(color[0]*dot_product),round(color[1]*dot_product),round(color[2]*dot_product))))
 
     return triangles
 
-def draw_prism(points, cx,cy,cz, cpitch,cyaw,croll):
+def points_to_triangles(points, triangle_table,color, cx,cy,cz,cpitch,cyaw,croll):
 
-    faces = points_to_faces(points, GEOMETRY["prism_triangle_table"])
-    triangles = faces_to_triangles(faces,cx,cy,cz,cpitch,cyaw,croll)
+    faces = points_to_faces(points, triangle_table)
+    return faces_to_triangles(faces,color, cx, cy, cz, cpitch, cyaw, croll)
     
-    for triangle in triangles:
-        x = [p[0] for p in triangle]
-        y = [p[1] for p in triangle]
-        stddraw.filledPolygon(x,y)
-
-def draw_plane(points, cx,cy,cz,cpitch,cyaw,croll):
-
-    faces = points_to_faces(points, GEOMETRY["plane_triangle_table"])
-    triangles = faces_to_triangles(faces,cx,cy,cz,cpitch,cyaw,croll)
-    
-    for triangle in triangles:
-        x = [p[0] for p in triangle]
-        y = [p[1] for p in triangle]
-        stddraw.filledPolygon(x,y)
-
 
 
 # Validators
@@ -1101,22 +1126,40 @@ def main_gui( args ):
     stddraw.setXscale(-1,1)
     stddraw.setYscale(-1,1)
 
-    cx, cy, cz = (-1,4,4)
-    cpitch, cyaw, croll = (0.5,0.0,0.0)
+    # Define camera
+    cx, cy, cz = (2,2,10)
+    cpitch, cyaw, croll = (pi/2,0.0,0.0)
 
-    cube_points = GEOMETRY["get_prism_points(x,y,z,l,w,h)"](1,2,0,1,1,1)
-    floor_points = GEOMETRY["get_plane_points(x,y,z,l,w)"](1,0,0,5,5)
+    # Object tracker
+    objects = []
+
+    for x in range(3):
+        for y in range(3):
+            objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](x*2-2.5,y*2-2.5,0,1,1,2),GEOMETRY["prism_triangle_table"],(255,0,0)))
     
     while True:
         # BG
         stddraw.clear()
-        cz -= 0.001
 
-        stddraw.setPenColor(stddraw.MAGENTA)
-        draw_plane(floor_points,cx,cy,cz,cpitch,cyaw,croll)
+        cx,cy,cz = rotate_around_origin(cx,cy,cz,0,0.02,0)
+        #cyaw += 0.002
 
-        stddraw.setPenColor(stddraw.GRAY)
-        draw_prism(cube_points, cx,cy,cz,cpitch,cyaw,croll)
+
+
+        # Turn points into sorted triangles for drawing
+        triangles = []
+        [triangles.extend(points_to_triangles(points,triangle_table,color, cx,cy,cz,cpitch,cyaw,croll)) for points, triangle_table, color in objects]
+        triangles.sort(key=lambda x:x[3], reverse=True)
+
+
+        for triangle in triangles:
+            a,b,c,_,color = triangle
+            stddraw.setPenColor(color)
+            stddraw.filledPolygon([a[0],b[0],c[0]],[a[1],b[1],c[1]])
+
+
+
+
 
         
 

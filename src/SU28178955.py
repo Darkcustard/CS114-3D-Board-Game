@@ -117,7 +117,7 @@ def rotate_around_origin(x,y,z,pitch,yaw,roll):
 
     # define angle transform
     yaw_transform = [[cos(yaw), -sin(yaw), 0],[sin(yaw),cos(yaw),0],[0,0,1]]
-    pitch_transform = [[cos(pitch),0,sin(pitch)],[0,1,0],[sin(pitch),0,cos(pitch)]]
+    pitch_transform = [[cos(pitch),0,sin(pitch)],[0,1,0],[-sin(pitch),0,cos(pitch)]]
     roll_transform = [[1,0,0],[0,cos(roll),-sin(roll)],[0,sin(roll),cos(roll)]]
     transform = matmult(matmult(yaw_transform, pitch_transform), roll_transform)
     
@@ -1195,26 +1195,65 @@ def main_gui( args ):
     stddraw.setYscale(-1,1)
 
     # Define camera
-    cx, cy, cz = (2,2,10)
-    cpitch, cyaw, croll = (pi/2,0.0,0.0)
+    cx, cy, cz = (-1,5,5)
+    cpitch, cyaw, croll = (0.5,0.0,0.0)
 
     # Object tracker
     objects = []
+    floor = []
+    lines = []
 
-    for x in range(3):
-        for y in range(3):
-            objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](x*2-2.5,y*2-2.5,0,1,1,2),GEOMETRY["prism_triangle_table"],(255,0,0)))
+
+    for row in range(args["board_height"]):
+        for col in range(args["board_width"]):
+            #color = (255,255,255) if (row+col)% 2 == 0 else (0,0,0)
+            color = (255,255,255)
+            floor.append((GEOMETRY["get_plane_points(x,y,z,l,w)"](row,col,0,1,1),GEOMETRY["plane_triangle_table"],color))
+
+    for row in range(args["board_height"]+1):
+        lines.append(((row,0,0),(row,args["board_width"],0)))
+
+    for col in range(args["board_width"]+1):
+        lines.append(((0,col,0),(args["board_height"],col,0)))
+
+
+    objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](2,2,0,1,1,2),GEOMETRY["prism_triangle_table"],(255,255,255)))
+    objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](6,6,0,2,2,2),GEOMETRY["prism_triangle_table"],(20,20,20)))
+    rot = 0
+
+    # for x in range(3):
+    #     for y in range(3):
+    #         objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](x*2-2.5,y*2-2.5,0,1,1,2),GEOMETRY["prism_triangle_table"],(255,0,0)))
     
     while True:
         # BG
-        stddraw.clear()
+        stddraw.clear(stddraw.color.Color(200,200,200))
 
-        cx,cy,cz = rotate_around_origin(cx,cy,cz,0,0.02,0)
+        #cx,cy,cz = rotate_around_origin(cx,cy,cz,0,0.02,0)
         #cyaw += 0.002
 
 
 
-        # Turn points into sorted triangles for drawing
+        # Draw floor
+        triangles = []
+        [triangles.extend(points_to_triangles(points,triangle_table,color, cx,cy,cz,cpitch,cyaw,croll)) for points, triangle_table, color in floor]
+        triangles.sort(key=lambda x:x[3], reverse=True)
+
+        for triangle in triangles:
+            a,b,c,_,color = triangle
+            stddraw.setPenColor(color)
+            stddraw.filledPolygon([a[0],b[0],c[0]],[a[1],b[1],c[1]])
+
+        # Draw lines
+        stddraw.setPenColor(stddraw.BLACK)
+        stddraw.setPenRadius(0)
+        for line in lines:
+            start, end = line
+            start = perspective_transform(start[0],start[1],start[2],cx,cy,cz,cpitch,cyaw,croll)[0]
+            end = perspective_transform(end[0],end[1],end[2],cx,cy,cz,cpitch,cyaw,croll)[0]
+            stddraw.line(start[0],start[1],end[0],end[1])
+
+        # Draw objects
         triangles = []
         [triangles.extend(points_to_triangles(points,triangle_table,color, cx,cy,cz,cpitch,cyaw,croll)) for points, triangle_table, color in objects]
         triangles.sort(key=lambda x:x[3], reverse=True)
@@ -1224,6 +1263,16 @@ def main_gui( args ):
             a,b,c,_,color = triangle
             stddraw.setPenColor(color)
             stddraw.filledPolygon([a[0],b[0],c[0]],[a[1],b[1],c[1]])
+        
+        if rot < pi/2:
+            rot += 0.05
+            
+            for i in range(len(objects[0][0])):
+                
+                x,y,z = objects[0][0][i]
+                rotated = rotate_around_origin(x-2,y-2,z,0,0,0.05)
+                objects[0][0][i] = (rotated[0]+2, rotated[1]+2, rotated[2])
+
 
 
 

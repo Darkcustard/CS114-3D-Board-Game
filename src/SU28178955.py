@@ -19,6 +19,7 @@ ERRORS = {
     "sink_adjacency" : "ERROR: Sink cannot be next to another sink",
     "frozen" : "ERROR: Cannot move frozen piece",   
     "no_freezes" : "ERROR: No freezings left",
+    "no_bomb" : "ERROR: Cannot place bomb after move",
 
     "not_on_board(r,c)" : lambda r,c : f"ERROR: Field {r} {c} not on board",
     "invalid_object(o)" : lambda o: f"ERROR: Invalid object type {o}",
@@ -452,7 +453,7 @@ def check_win_conditions( board, player_scores, freezes, sink_moves ):
         stdio.writeln(OUTCOMES["d_win"])
         exit()
 
-def check_for_moves(board, lights_turn, turn_number, sink_moves, frozen_pieces, freezes):
+def check_for_moves(board, lights_turn, turn_number, sink_moves, frozen_pieces, freezes, bomb_placed):
     
     # init
     possible = 0
@@ -476,7 +477,7 @@ def check_for_moves(board, lights_turn, turn_number, sink_moves, frozen_pieces, 
     # For each piece bruteforce possible moves
     for row, col in owned_piece_locations:
         for move in possible_moves:
-            if move_pieces(board,f"{max_row-row} {col} {move}", lights_turn, turn_number, sink_moves, frozen_pieces, freezes, report_actions_left=True): possible += 1
+            if move_pieces(board,f"{max_row-row} {col} {move}", lights_turn, turn_number, sink_moves, frozen_pieces, freezes, bomb_placed, report_actions_left=True): possible += 1
 
 
     # Allow for possible sink shifting (CHECK IF THIS COUNTS AS A MOVE)
@@ -494,8 +495,49 @@ def get_sink_size( board, row, col ):
     
 def copy_board(board):
     return [row.copy() for row in board]
+
+def enforce_bombs(board,bombs):
+
+    max_row = len(board)-1
+    max_col = len(board[0])-1
+    digits = list("0123456789")
     
-def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_pieces, freezes, report_actions_left=False ):
+    for bomb in bombs:
+        row, col = bomb
+        piece = board[row][col]
+
+        # Digits
+        if sum(1 if char in digits else 0 for char in piece) == len(digits):
+            
+            code = int(board[row][col])
+            root_col = code % (max_col+1)
+            root_row = int((code - col)/(max_col+1))
+            
+            # Remove all references
+            board[root_row][root_col] = ""
+            for rdx in range(len(board)):
+                for cdx in range(len(board[0])):
+                    if board[rdx][cdx] == str(code):
+                        board[rdx][cdx] = ''
+
+            bombs.remove(bomb)
+
+        # Root
+        if piece.lower() in list("abcd"):
+            code = row*(max_col+1) + col
+            board[row][col] = ''
+            for rdx in range(len(board)):
+                for cdx in range(len(board[0])):
+                    if board[rdx][cdx] == str(code):
+                        board[rdx][cdx] = ''
+            
+            bombs.remove(bomb)
+
+            
+
+            
+
+def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_pieces, freezes,bomb_placed, report_actions_left=False ):
     
     args = [x for x in command.split(" ") if x != '']
     max_row, max_col = (len(board)-1, len(board[0])-1)
@@ -518,6 +560,20 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
     if not check_coordinates_range_inclusive(row, col, 0, max_row, 0, max_col): 
         if not report_actions_left : stdio.writeln(ERRORS["not_on_board(r,c)"](row,col)); exit()
         else: return False
+    
+    # Place bomb
+    if move_type == "b":
+        
+        # Make sure field free
+        if not board[max_row-row][col] == "": stdio.writeln(ERRORS["field_not_free(r,c)"](row,col)); exit()
+
+        # Before turn
+        if turn_number != 1: stdio.writeln(ERRORS["no_bomb"]); exit()
+
+        # No bomb placed
+        if bomb_placed: stdio.writeln(ERRORS["no_bomb"]); exit()
+
+        return ("b",(max_row-row, col))
 
     if board[max_row-row][col] == '': 
         if not report_actions_left : stdio.writeln(ERRORS["no_piece(r,c)"](row,col)); exit()
@@ -1055,6 +1111,8 @@ def main_nogui( args ):
     sink_moves = {"l" : 2, "d" : 2}
     freezes = {"l" : 2, "d" : 2}
     player_scores = {"l" : 0, "d" : 0}
+    bomb_placed = False
+    bombs = []
 
     frozen_pieces = [] # FMT (row, col, owned_by_light?, counter)
     
@@ -1064,14 +1122,14 @@ def main_nogui( args ):
         
         # Keep track of turns
         turn_counter += 1
-        if turn_counter == 3: turn_counter = 1; lights_turn = not lights_turn
+        if turn_counter == 3: turn_counter = 1; lights_turn = not lights_turn; bomb_placed = False
         
         # Track board before first turn
         if turn_counter == 1:
             pre_turn_board = copy_board(board)
 
 
-        check_for_moves(board, lights_turn, turn_counter, sink_moves, frozen_pieces, freezes)
+        check_for_moves(board, lights_turn, turn_counter, sink_moves, frozen_pieces, freezes, bomb_placed)
         # Read command or end partial game
 
         if stdio.hasNextLine():
@@ -1080,8 +1138,8 @@ def main_nogui( args ):
             quit()
 
         # Check for possible moves
-        result = move_pieces(board, command, lights_turn, turn_counter, sink_moves, frozen_pieces, freezes)
-
+        result = move_pieces(board, command, lights_turn, turn_counter, sink_moves, frozen_pieces, freezes, bomb_placed)
+        enforce_bombs(board,bombs)
 
         # Ensure 2x2x2 movement ends turn
         if result[0] == "d":
@@ -1095,6 +1153,16 @@ def main_nogui( args ):
 
         elif result[0] == "s":
             player_scores["l" if lights_turn else "d"] += result[1]
+
+        elif result[0] == "b":
+            turn_counter -= 1
+            bomb_placed = True
+
+            # Explode bombs when place upon eachother
+            if result[1] not in bombs:
+                bombs.append(result[1])
+            else:
+                bombs.remove(result[1])
 
         # Check board after second turn
         elif turn_counter == 2:

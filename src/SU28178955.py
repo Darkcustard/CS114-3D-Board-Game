@@ -2,7 +2,7 @@ import sys
 import stddraw
 import stdio
 
-from math import cos, sin, tan, pi, atan
+from math import cos, sin, tan, pi, atan, asin
 
 
 ERRORS = {
@@ -82,6 +82,13 @@ def clamp(x,xmin,xmax):
 def dot(a,b):
     return sum([a[i]*b[i] for i in range(len(a))])
 
+def normalize(x,y,z):
+    l = (x**2+y**2+z**2)**0.5
+    if l == 0:
+        return (0,0,0)
+    else:
+        return (x/l, y/l, z/l)
+
 def normalized_dot(a,b):
     length = (a[0]**2+a[1]**2+a[2]**2)**0.5*(b[0]**2+b[1]**2+b[2]**2)**0.5
     return dot(a,b)/length
@@ -125,6 +132,11 @@ def rotate_around_origin(x,y,z,pitch,yaw,roll):
     new_coordinates = transpose(matmult(transform, transpose([[x,y,z]])))[0]
     return (new_coordinates[0], new_coordinates[1], new_coordinates[2])
 
+def rotate_around_point(x,y,z,px,py,pz,pitch,yaw,roll):
+    rx, ry, rz = (x-px,y-py,z-pz)
+    tx, ty, tz = rotate_around_origin(rx,ry,rz,pitch,yaw,roll)
+    return (tx+px, ty+py, tz+pz)
+
 def global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll):
 
     # X Forward Y Right Z up
@@ -132,11 +144,11 @@ def global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll):
     # Make coordinates relative to camera
     rx, ry, rz = (x-cx, y-cy, z-cz)
 
-    # define Reverse angle transform
-    yaw_transform = [[cos(-yaw), -sin(-yaw), 0],[sin(-yaw),cos(-yaw),0],[0,0,1]]
-    pitch_transform = [[cos(-pitch),0,sin(-pitch)],[0,1,0],[-sin(-pitch),0,cos(-pitch)]]
-    roll_transform = [[1,0,0],[0,cos(-roll),-sin(-roll)],[0,sin(-roll),cos(-roll)]]
-    transform = matmult(matmult(yaw_transform, pitch_transform), roll_transform)
+    # define inverse angle transform
+    yaw_transform = transpose([[cos(yaw), -sin(yaw), 0],[sin(yaw),cos(yaw),0],[0,0,1]])
+    pitch_transform = transpose([[cos(pitch),0,sin(pitch)],[0,1,0],[-sin(pitch),0,cos(pitch)]])
+    roll_transform = transpose([[1,0,0],[0,cos(roll),-sin(roll)],[0,sin(roll),cos(roll)]])
+    transform = matmult(matmult(pitch_transform, roll_transform), yaw_transform)
     
     # Apply transform and return
     new_coordinates = transpose(matmult(transform, transpose([[rx,ry,rz]])))[0]
@@ -146,7 +158,6 @@ def perspective_transform(x,y,z,cx,cy,cz,pitch,yaw,roll,fov=2/3*pi):
     tx, ty, tz = global_coord_to_camera_transform(x,y,z,cx,cy,cz,pitch,yaw,roll)
     px, py = (ty/(tx*tan(fov/2)), tz/(tx*tan(fov/2)))
     return ((clamp(px,-2,2), clamp(py,-2,2)),tx)
-
 
 def points_to_faces(points, triangle_table):
 
@@ -533,9 +544,57 @@ def enforce_bombs(board,bombs):
             
             bombs.remove(bomb)
 
-            
+def draw_objects(objs,cx,cy,cz,cpitch,cyaw,croll):
+    triangles = []
+    [triangles.extend(points_to_triangles(points,triangle_table,color, cx,cy,cz,cpitch,cyaw,croll)) for points, triangle_table, color in objs]
+    triangles.sort(key=lambda x:x[3], reverse=True)
 
+    for triangle in triangles:
+        a,b,c,_,color = triangle
+        stddraw.setPenColor(color)
+        stddraw.filledPolygon([a[0],b[0],c[0]],[a[1],b[1],c[1]])   
+
+def angle_radius_to_xyz(r,pitch,yaw):
+    x = r*cos(pitch)*cos(yaw)
+    y = r*cos(pitch)*sin(yaw)
+    z = r*sin(pitch)
+    return (x,y,z)
+
+def draw_lines(lines, cx,cy,cz,cpitch,cyaw,croll):
+    stddraw.setPenColor(stddraw.BLACK)
+    stddraw.setPenRadius(0)
+    for line in lines:
+        start, end = line
+        start = perspective_transform(start[0],start[1],start[2],cx,cy,cz,cpitch,cyaw,croll)[0]
+        end = perspective_transform(end[0],end[1],end[2],cx,cy,cz,cpitch,cyaw,croll)[0]
+        stddraw.line(start[0],start[1],end[0],end[1])
             
+def cast_mouse_ray(board,cx,cy,cz,cpitch,cyaw):
+    mx,my = (stddraw.mouseX(), stddraw.mouseY())
+    hf = 2/3*pi
+
+    rx, ry, rz = (1/sin(hf), -mx*tan(hf)/sin(hf),-my*tan(hf)/sin(hf))
+    tx,ty,tz = rotate_around_origin(rx,ry,rz,cpitch,cyaw,0)
+    dx, dy, dz = normalize(tx,ty,tz)
+
+    # Define ray
+    step = 0.2
+    steps = 100
+    ray = [cx,cy,cz]
+
+    for i in range(steps):
+        ray[0] += dx*step
+        ray[1] += dy*step
+        ray[2] += dz*step
+
+        if ray[2] < 0:
+            return (True, ray)
+        
+    return (False, None)
+        
+
+    
+
 
 def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_pieces, freezes,bomb_placed, report_actions_left=False ):
     
@@ -1094,8 +1153,6 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
         else: return False
 
 
-# Render
-
 
 # Game loop
 def main_nogui( args ):
@@ -1189,6 +1246,10 @@ def main_gui( args ):
     # Const
     RESOLUTION = (1000,1000)
 
+    # Game var
+    board = [["" for x in range(args["board_width"])] for y in range(args["board_height"])]
+    #read_stdin_setup_to_board(board)
+
     # Configure Window
     stddraw.setCanvasSize(RESOLUTION[0], RESOLUTION[1])
     stddraw.setXscale(-1,1)
@@ -1203,79 +1264,42 @@ def main_gui( args ):
     floor = []
     lines = []
 
-
+    # Create tiles
     for row in range(args["board_height"]):
         for col in range(args["board_width"]):
             #color = (255,255,255) if (row+col)% 2 == 0 else (0,0,0)
             color = (255,255,255)
             floor.append((GEOMETRY["get_plane_points(x,y,z,l,w)"](row,col,0,1,1),GEOMETRY["plane_triangle_table"],color))
 
+    # Create Board lines
     for row in range(args["board_height"]+1):
         lines.append(((row,0,0),(row,args["board_width"],0)))
-
     for col in range(args["board_width"]+1):
         lines.append(((0,col,0),(args["board_height"],col,0)))
 
 
-    objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](2,2,0,1,1,2),GEOMETRY["prism_triangle_table"],(255,255,255)))
-    objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](6,6,0,2,2,2),GEOMETRY["prism_triangle_table"],(20,20,20)))
-    rot = 0
+    # Example prisms
+    #objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](6,6,0,2,2,2),GEOMETRY["prism_triangle_table"],(20,20,20)))
 
-    # for x in range(3):
-    #     for y in range(3):
-    #         objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](x*2-2.5,y*2-2.5,0,1,1,2),GEOMETRY["prism_triangle_table"],(255,0,0)))
-    
+
+
     while True:
         # BG
         stddraw.clear(stddraw.color.Color(200,200,200))
-
-        #cx,cy,cz = rotate_around_origin(cx,cy,cz,0,0.02,0)
-        #cyaw += 0.002
+        #cyaw += 0.01
 
 
+        # Draw game objects
+        draw_objects(floor,cx,cy,cz,cpitch,cyaw,croll)
+        draw_lines(lines,cx,cy,cz,cpitch,cyaw,croll)
+        draw_objects(objects,cx,cy,cz,cpitch,cyaw,croll)
 
-        # Draw floor
-        triangles = []
-        [triangles.extend(points_to_triangles(points,triangle_table,color, cx,cy,cz,cpitch,cyaw,croll)) for points, triangle_table, color in floor]
-        triangles.sort(key=lambda x:x[3], reverse=True)
-
-        for triangle in triangles:
-            a,b,c,_,color = triangle
-            stddraw.setPenColor(color)
-            stddraw.filledPolygon([a[0],b[0],c[0]],[a[1],b[1],c[1]])
-
-        # Draw lines
-        stddraw.setPenColor(stddraw.BLACK)
-        stddraw.setPenRadius(0)
-        for line in lines:
-            start, end = line
-            start = perspective_transform(start[0],start[1],start[2],cx,cy,cz,cpitch,cyaw,croll)[0]
-            end = perspective_transform(end[0],end[1],end[2],cx,cy,cz,cpitch,cyaw,croll)[0]
-            stddraw.line(start[0],start[1],end[0],end[1])
-
-        # Draw objects
-        triangles = []
-        [triangles.extend(points_to_triangles(points,triangle_table,color, cx,cy,cz,cpitch,cyaw,croll)) for points, triangle_table, color in objects]
-        triangles.sort(key=lambda x:x[3], reverse=True)
-
-
-        for triangle in triangles:
-            a,b,c,_,color = triangle
-            stddraw.setPenColor(color)
-            stddraw.filledPolygon([a[0],b[0],c[0]],[a[1],b[1],c[1]])
-        
-        if rot < pi/2:
-            rot += 0.05
-            
-            for i in range(len(objects[0][0])):
-                
-                x,y,z = objects[0][0][i]
-                rotated = rotate_around_origin(x-2,y-2,z,0,0,0.05)
-                objects[0][0][i] = (rotated[0]+2, rotated[1]+2, rotated[2])
-
-
-
-
+        mouse_state = stddraw.mousePressed()
+        if mouse_state:
+            result = cast_mouse_ray(board,cx,cy,cz,cpitch,cyaw)
+            collision = result[1]
+            if result[0]:
+                objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](collision[0],collision[1],collision[2],2,2,2),GEOMETRY["prism_triangle_table"],(20,20,20)))
 
 
         

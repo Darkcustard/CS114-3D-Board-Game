@@ -168,6 +168,12 @@ def points_to_faces(points, triangle_table):
 
     return faces
 
+def get_face_normal(face):
+    c1 = (face[1][0]-face[0][0],face[1][1]-face[0][1],face[1][2]-face[0][2])
+    c2 = (face[2][0]-face[0][0],face[2][1]-face[0][1],face[2][2]-face[0][2])
+    normal = cross(c1,c2)  
+    return normal
+
 def faces_to_triangles(faces,color, cx,cy,cz,cpitch,cyaw,croll):
 
     triangles = []
@@ -178,10 +184,9 @@ def faces_to_triangles(faces,color, cx,cy,cz,cpitch,cyaw,croll):
         midy = (face[0][1] + face[1][1] + face[2][1])/3
         midz = (face[0][2] + face[1][2] + face[2][2])/3
 
-        c1 = (face[1][0]-face[0][0],face[1][1]-face[0][1],face[1][2]-face[0][2])
-        c2 = (face[2][0]-face[0][0],face[2][1]-face[0][1],face[2][2]-face[0][2])
 
-        normal = cross(c1,c2)   
+
+        normal = get_face_normal(face)
         to_face = (midx-cx,midy-cy,midz-cz)
         dot_product = -normalized_dot(normal,to_face)
 
@@ -546,7 +551,7 @@ def enforce_bombs(board,bombs):
 
 def draw_objects(objs,cx,cy,cz,cpitch,cyaw,croll):
     triangles = []
-    [triangles.extend(points_to_triangles(points,triangle_table,color, cx,cy,cz,cpitch,cyaw,croll)) for points, triangle_table, color in objs]
+    [triangles.extend(points_to_triangles(points,triangle_table,color, cx,cy,cz,cpitch,cyaw,croll)) for points, triangle_table, color, team in objs]
     triangles.sort(key=lambda x:x[3], reverse=True)
 
     for triangle in triangles:
@@ -569,7 +574,7 @@ def draw_lines(lines, cx,cy,cz,cpitch,cyaw,croll):
         end = perspective_transform(end[0],end[1],end[2],cx,cy,cz,cpitch,cyaw,croll)[0]
         stddraw.line(start[0],start[1],end[0],end[1])
             
-def cast_mouse_ray(board,cx,cy,cz,cpitch,cyaw):
+def cast_mouse_ray(board, objs,cx,cy,cz,cpitch,cyaw):
     mx,my = (stddraw.mouseX(), stddraw.mouseY())
     hf = 2/3*pi
 
@@ -583,14 +588,38 @@ def cast_mouse_ray(board,cx,cy,cz,cpitch,cyaw):
     ray = [cx,cy,cz]
 
     for i in range(steps):
+
+        # Step ray
         ray[0] += dx*step
         ray[1] += dy*step
         ray[2] += dz*step
 
-        if ray[2] < 0:
-            return (True, ray)
+        # Check for object collisions
+        for object in objs:
+            faces = points_to_faces(object[0],object[1])
+
+
+            inside = True
+            for face in faces:
+                midpoint = ((face[0][0]+face[1][0]+face[2][0])/3,(face[0][1]+face[1][1]+face[2][1])/3,(face[0][2]+face[1][2]+face[2][2])/3)
+                normal = get_face_normal(face)
+                to_midpoint = (midpoint[0]-ray[0], midpoint[1]-ray[1], midpoint[2]-ray[2])
+                
+                if normalized_dot(normal, to_midpoint) < 0:
+                    inside = False
+                    break
+            
+            if inside:
+                return (0, objs.index(object))
+
+
+        if ray[2] <= 0.0:
+            break
         
-    return (False, None)
+    row = ray[0] // 1
+    col = ray[1] // 1
+
+    return (1,row, col)
         
 
     
@@ -1248,6 +1277,7 @@ def main_gui( args ):
 
     # Game var
     board = [["" for x in range(args["board_width"])] for y in range(args["board_height"])]
+    selected = None
     #read_stdin_setup_to_board(board)
 
     # Configure Window
@@ -1269,7 +1299,7 @@ def main_gui( args ):
         for col in range(args["board_width"]):
             #color = (255,255,255) if (row+col)% 2 == 0 else (0,0,0)
             color = (255,255,255)
-            floor.append((GEOMETRY["get_plane_points(x,y,z,l,w)"](row,col,0,1,1),GEOMETRY["plane_triangle_table"],color))
+            floor.append((GEOMETRY["get_plane_points(x,y,z,l,w)"](row,col,0,1,1),GEOMETRY["plane_triangle_table"],color,None))
 
     # Create Board lines
     for row in range(args["board_height"]+1):
@@ -1279,15 +1309,24 @@ def main_gui( args ):
 
 
     # Example prisms
-    #objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](6,6,0,2,2,2),GEOMETRY["prism_triangle_table"],(20,20,20)))
+    objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](6,6,0,1,1,2),GEOMETRY["prism_triangle_table"],(20,20,20),"l"])
+    objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](2,2,0,1,1,2),GEOMETRY["prism_triangle_table"],(20,20,20),"d"])
 
 
 
     while True:
         # BG
         stddraw.clear(stddraw.color.Color(200,200,200))
-        #cyaw += 0.01
+        #print(objects)
+        
+        for i in range(len(objects)):
+            
+            default = (200,200,200) if objects[i][3] == "l" else (20,20,20)
 
+            if selected == i:
+                objects[i][2] = (default[0]+50,default[1]+50, default[2]+50)
+            else:
+                objects[i][2] = default
 
         # Draw game objects
         draw_objects(floor,cx,cy,cz,cpitch,cyaw,croll)
@@ -1296,10 +1335,11 @@ def main_gui( args ):
 
         mouse_state = stddraw.mousePressed()
         if mouse_state:
-            result = cast_mouse_ray(board,cx,cy,cz,cpitch,cyaw)
-            collision = result[1]
-            if result[0]:
-                objects.append((GEOMETRY["get_prism_points(x,y,z,l,w,h)"](collision[0],collision[1],collision[2],2,2,2),GEOMETRY["prism_triangle_table"],(20,20,20)))
+            result = cast_mouse_ray(board,objects,cx,cy,cz,cpitch,cyaw)
+            if result[0] == 0:
+                selected = result[1]
+            else:
+                selected = None
 
 
         

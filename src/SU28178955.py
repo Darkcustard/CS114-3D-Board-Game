@@ -300,7 +300,7 @@ def print_board( board ):
 
         stdio.writeln(line)
 
-def read_stdin_setup_to_board( board ):
+def read_stdin_setup_to_board( board, report=True ):
 
     valid_setup = True
 
@@ -317,7 +317,8 @@ def read_stdin_setup_to_board( board ):
 
         if line_arguments[0] == "#":
             if valid_setup:
-                print_board(board)
+                if report:
+                    print_board(board)
             break
 
         # Place sinks
@@ -621,10 +622,6 @@ def cast_mouse_ray(board, objs,cx,cy,cz,cpitch,cyaw):
 
     return (1,row, col)
         
-
-    
-
-
 def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_pieces, freezes,bomb_placed, report_actions_left=False ):
     
     args = [x for x in command.split(" ") if x != '']
@@ -1278,7 +1275,12 @@ def main_gui( args ):
     # Game var
     board = [["" for x in range(args["board_width"])] for y in range(args["board_height"])]
     selected = None
-    #read_stdin_setup_to_board(board)
+    read_stdin_setup_to_board(board,report=False)
+
+    max_row = len(board)-1
+    max_col = len(board[0])-1
+    
+    board_midpoint = (len(board)/2,len(board[0])/2)
 
     # Configure Window
     stddraw.setCanvasSize(RESOLUTION[0], RESOLUTION[1])
@@ -1286,20 +1288,15 @@ def main_gui( args ):
     stddraw.setYscale(-1,1)
 
     # Define camera
-    cx, cy, cz = (-1,5,5)
-    cpitch, cyaw, croll = (0.5,0.0,0.0)
+    cx, cy, cz = (1,1,6)
+    cpitch, cyaw, croll = (1.0,0.8,0.0)
 
     # Object tracker
     objects = []
-    floor = []
     lines = []
 
-    # Create tiles
-    for row in range(args["board_height"]):
-        for col in range(args["board_width"]):
-            #color = (255,255,255) if (row+col)% 2 == 0 else (0,0,0)
-            color = (255,255,255)
-            floor.append((GEOMETRY["get_plane_points(x,y,z,l,w)"](row,col,0,1,1),GEOMETRY["plane_triangle_table"],color,None))
+    # floor
+    floor = [(0,0,0),(max_row+1,0,0),(max_row+1,max_col+1,0),(0,max_col+1,0)]
 
     # Create Board lines
     for row in range(args["board_height"]+1):
@@ -1309,30 +1306,56 @@ def main_gui( args ):
 
 
     # Example prisms
-    objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](6,6,0,1,1,2),GEOMETRY["prism_triangle_table"],(20,20,20),"l"])
-    objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](2,2,0,1,1,2),GEOMETRY["prism_triangle_table"],(20,20,20),"d"])
+    # objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](6,6,0,1,1,2),GEOMETRY["prism_triangle_table"],(20,20,20),"l"])
+    # objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](2,2,0,1,1,2),GEOMETRY["prism_triangle_table"],(20,20,20),"d"])
+
+    # Create 3D objects from board
+    for row in range(len(board)):
+        for col in range(len(board[0])):
+
+            piece = board[row][col]
+
+            if piece in list("AaBbCcDds"):
+                lower_piece = piece.lower()
+                if lower_piece in list("abcd"):
+                
+                    team = "l" if piece.islower() else "d"
+
+                    if lower_piece == "a":
+                        size = (1,1,1)
+                    elif lower_piece == "b":
+                        size = (1,1,2)
+                    elif lower_piece == "c":
+                        size = (1,1,3)
+                    else:
+                        size = (2,2,2)
+
+                    objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](max_row-row,col,0,size[0],size[1],size[2]),GEOMETRY["prism_triangle_table"],(20,20,20),team])
 
 
 
     while True:
         # BG
-        stddraw.clear(stddraw.color.Color(200,200,200))
-        #print(objects)
+        stddraw.clear(stddraw.color.Color(0,125,125))
         
+        # Reset colors of selected objects
         for i in range(len(objects)):
-            
             default = (200,200,200) if objects[i][3] == "l" else (20,20,20)
-
             if selected == i:
-                objects[i][2] = (default[0]+50,default[1]+50, default[2]+50)
+                objects[i][2] = (default[0]+50,default[1]+50, default[2]+55)
             else:
                 objects[i][2] = default
 
         # Draw game objects
-        draw_objects(floor,cx,cy,cz,cpitch,cyaw,croll)
+        stddraw.setPenColor(stddraw.color.Color(255,255,255))
+        floor_projected = [perspective_transform(corner[0],corner[1],corner[2],cx,cy,cz,cpitch,cyaw,croll)[0] for corner in floor]
+        fx, fy = ([coord[0] for coord in floor_projected],[coord[1] for coord in floor_projected])
+        stddraw.filledPolygon(fx,fy)
+
         draw_lines(lines,cx,cy,cz,cpitch,cyaw,croll)
         draw_objects(objects,cx,cy,cz,cpitch,cyaw,croll)
 
+        # Select objects
         mouse_state = stddraw.mousePressed()
         if mouse_state:
             result = cast_mouse_ray(board,objects,cx,cy,cz,cpitch,cyaw)
@@ -1341,11 +1364,15 @@ def main_gui( args ):
             else:
                 selected = None
 
+        # Rotate
+        keys = stddraw.getKeysPressed()
+        left, right = (keys[stddraw.K_LEFT], keys[stddraw.K_RIGHT])
+        if left or right:
+            speed = 0.05
+            angle = speed if left else -speed
+            cyaw += angle
+            cx, cy,cz = rotate_around_point(cx,cy,cz,board_midpoint[0],board_midpoint[1],0,0,angle,0)
 
-        
-
-
-        
         # Update
         stddraw.show(0)
       

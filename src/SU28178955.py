@@ -184,8 +184,6 @@ def faces_to_triangles(faces,color, cx,cy,cz,cpitch,cyaw,croll):
         midy = (face[0][1] + face[1][1] + face[2][1])/3
         midz = (face[0][2] + face[1][2] + face[2][2])/3
 
-
-
         normal = get_face_normal(face)
         to_face = (midx-cx,midy-cy,midz-cz)
         dot_product = -normalized_dot(normal,to_face)
@@ -197,7 +195,7 @@ def faces_to_triangles(faces,color, cx,cy,cz,cpitch,cyaw,croll):
         b,d2 = perspective_transform(face[1][0],face[1][1],face[1][2],cx,cy,cz,cpitch,cyaw,croll)
         c,d3 = perspective_transform(face[2][0],face[2][1],face[2][2],cx,cy,cz,cpitch,cyaw,croll)
 
-        d = (d1+d2+d3)/3
+        d = (d1+d2+d3)/3.0
         
         triangles.append((a,b,c,d,stddraw.color.Color(round(color[0]*dot_product),round(color[1]*dot_product),round(color[2]*dot_product))))
 
@@ -551,6 +549,7 @@ def enforce_bombs(board,bombs):
             bombs.remove(bomb)
 
 def draw_objects(objs,cx,cy,cz,cpitch,cyaw,croll):
+
     triangles = []
     [triangles.extend(points_to_triangles(points,triangle_table,color, cx,cy,cz,cpitch,cyaw,croll)) for points, triangle_table, color, team in objs]
     triangles.sort(key=lambda x:x[3], reverse=True)
@@ -1294,6 +1293,7 @@ def main_gui( args ):
     # Object tracker
     objects = []
     lines = []
+    sinks = []
 
     # floor
     floor = [(0,0,0),(max_row+1,0,0),(max_row+1,max_col+1,0),(0,max_col+1,0)]
@@ -1304,10 +1304,6 @@ def main_gui( args ):
     for col in range(args["board_width"]+1):
         lines.append(((0,col,0),(args["board_height"],col,0)))
 
-
-    # Example prisms
-    # objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](6,6,0,1,1,2),GEOMETRY["prism_triangle_table"],(20,20,20),"l"])
-    # objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](2,2,0,1,1,2),GEOMETRY["prism_triangle_table"],(20,20,20),"d"])
 
     # Create 3D objects from board
     for row in range(len(board)):
@@ -1332,6 +1328,9 @@ def main_gui( args ):
 
                     objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](max_row-row,col,0,size[0],size[1],size[2]),GEOMETRY["prism_triangle_table"],(20,20,20),team])
 
+                if lower_piece == "s":
+                    sinks.append([GEOMETRY["get_plane_points(x,y,z,l,w)"](max_row-row,col,0,1,1),GEOMETRY["plane_triangle_table"],(0,0,0),None])
+
 
 
     while True:
@@ -1353,6 +1352,7 @@ def main_gui( args ):
         stddraw.filledPolygon(fx,fy)
 
         draw_lines(lines,cx,cy,cz,cpitch,cyaw,croll)
+        draw_objects(sinks,cx,cy,cz,cpitch,cyaw,croll)
         draw_objects(objects,cx,cy,cz,cpitch,cyaw,croll)
 
         # Select objects
@@ -1364,7 +1364,7 @@ def main_gui( args ):
             else:
                 selected = None
 
-        # Rotate
+        # Rotate yaw
         keys = stddraw.getKeysPressed()
         left, right = (keys[stddraw.K_LEFT], keys[stddraw.K_RIGHT])
         if left or right:
@@ -1372,6 +1372,7 @@ def main_gui( args ):
             angle = speed if left else -speed
             cyaw += angle
             cx, cy,cz = rotate_around_point(cx,cy,cz,board_midpoint[0],board_midpoint[1],0,0,angle,0)
+        
 
         # Update
         stddraw.show(0)

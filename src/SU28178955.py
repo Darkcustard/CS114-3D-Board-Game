@@ -559,6 +559,33 @@ def draw_objects(objs,cx,cy,cz,cpitch,cyaw,croll):
         stddraw.setPenColor(color)
         stddraw.filledPolygon([a[0],b[0],c[0]],[a[1],b[1],c[1]])   
 
+def rotate_object(obj,steps,point,pitch,yaw,roll,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects):
+
+    def draw_scene():
+
+        stddraw.clear(stddraw.color.Color(0,125,125))
+
+        stddraw.setPenColor(stddraw.color.Color(255,255,255))
+        floor_projected = [perspective_transform(corner[0],corner[1],corner[2],cx,cy,cz,cpitch,cyaw,croll)[0] for corner in floor]
+        fx, fy = ([coord[0] for coord in floor_projected],[coord[1] for coord in floor_projected])
+        stddraw.filledPolygon(fx,fy)
+
+        draw_lines(lines,cx,cy,cz,cpitch,cyaw,croll)
+        draw_objects(sinks,cx,cy,cz,cpitch,cyaw,croll)
+        draw_objects(objects,cx,cy,cz,cpitch,cyaw,croll)
+
+    
+    step_size_pitch = pitch/steps
+    step_size_yaw = yaw/steps
+    step_size_roll = roll/steps
+
+    for step in range(steps):
+        for i in range(len(obj[0])):
+            x,y,z = obj[0][i]
+            obj[0][i] = rotate_around_point(x,y,z,point[0],point[1],point[2],step_size_pitch,step_size_yaw,step_size_roll)
+            draw_scene()
+            stddraw.show(0)
+
 def angle_radius_to_xyz(r,pitch,yaw):
     x = r*cos(pitch)*cos(yaw)
     y = r*cos(pitch)*sin(yaw)
@@ -1386,27 +1413,87 @@ def main_gui( args ):
 
         # Move blocks
         w,a,s,d = (keys[ord("w")],keys[ord("a")],keys[ord("s")],keys[ord("d")])
+        steps = 20
+
+
         if selected != None:
             obj = objects[selected]
 
             if not wl and w:
-                result = move_pieces(board,f"{selected_row} {selected_column} u",True, 1, 2, [], 2, False)
-                axis = sorted(obj[0],key=lambda x: x[0]-x[1]-x[2], reverse=True)[0]
-                for i in range(len(obj[0])):
-                    x,y,z = obj[0][i]
-                    obj[0][i] = rotate_around_point(x,y,z,axis[0],axis[1],axis[2],pi/2,0,0)
+                if move_pieces(board,f"{selected_row} {selected_column} u",True, 1, 2, [], 2, False, True):
+                    result = move_pieces(board,f"{selected_row} {selected_column} u",True, 1, 2, [], 2, False)
+                    axis = sorted(obj[0],key=lambda x: x[0]-x[1]-x[2], reverse=True)[0]
+                    rotate_object(obj,steps,axis,pi/2,0,0,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects)
+                        
+
+                    ax, ay = (0,0)
+                    for i in range(len(obj[0])):
+                        x,y,_ = obj[0][i]
+                        ax += x
+                        ay += y
+
+                    ax/=len(obj[0])
+                    ay/=len(obj[0])
+
+                    selected_row = round(ax//1)
+                    selected_column = round(ay//1)
+
+
 
             if not al and a:
-                result = move_pieces(board,f"{selected_row} {selected_column} l",True, 1, 2, [], 2, False)
-                axis = sorted(obj[0],key=lambda x: x[0]-x[1]-x[2], reverse=True)[0]
-                for i in range(len(obj[0])):
-                    x,y,z = obj[0][i]
-                    obj[0][i] = rotate_around_point(x,y,z,axis[0],axis[1],axis[2],0,0,pi/2)
+                if move_pieces(board,f"{selected_row} {selected_column} l",True, 1, 2, [], 2, False, True):
+                    result = move_pieces(board,f"{selected_row} {selected_column} l",True, 1, 2, [], 2, False)
+                    axis = sorted(obj[0],key=lambda x: -x[0]-x[1]-x[2], reverse=True)[0]
+                    rotate_object(obj,steps,axis,0,0,pi/2,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects)
+
+                    ax, ay = (0,0)
+                    for i in range(len(obj[0])):
+                        x,y,_ = obj[0][i]
+                        ax += x
+                        ay += y
+
+                    ax/=len(obj[0])
+                    ay/=len(obj[0])
+
+                    selected_row = round(ax//1)
+                    selected_column = round(ay//1)
 
             if not sl and s:
-                pass
+                if move_pieces(board,f"{selected_row} {selected_column} d",True, 1, 2, [], 2, False, True):
+                    result = move_pieces(board,f"{selected_row} {selected_column} d",True, 1, 2, [], 2, False)
+                    axis = sorted(obj[0],key=lambda x: -x[0]-x[1]-x[2], reverse=True)[0]
+                    rotate_object(obj,steps,axis,-pi/2,0,0,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects)
+
+                    ax, ay = (0,0)
+                    for i in range(len(obj[0])):
+                        x,y,_ = obj[0][i]
+                        ax += x
+                        ay += y
+
+                    ax/=len(obj[0])
+                    ay/=len(obj[0])
+
+                    selected_row = round(ax//1)
+                    selected_column = round(ay//1)
+
             if not dl and d:
-                pass
+                if move_pieces(board,f"{selected_row} {selected_column} r",True, 1, 2, [], 2, False, True):
+                    result = move_pieces(board,f"{selected_row} {selected_column} r",True, 1, 2, [], 2, False)
+                    axis = sorted(obj[0],key=lambda x: -x[0]+x[1]-x[2], reverse=True)[0]
+                    rotate_object(obj,steps,axis,0,0,-pi/2,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects)
+
+                    ax, ay = (0,0)
+                    for i in range(len(obj[0])):
+                        x,y,_ = obj[0][i]
+                        ax += x
+                        ay += y
+
+                    ax/=len(obj[0])
+                    ay/=len(obj[0])
+
+                    selected_row = round(ax//1)
+                    selected_column = round(ay//1)
+
         wl, al, sl, dl = (w,a,s,d)
         
 

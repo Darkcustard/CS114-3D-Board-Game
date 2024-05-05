@@ -608,18 +608,22 @@ def cast_mouse_ray(board, objs,cx,cy,cz,cpitch,cyaw):
                 if normalized_dot(normal, to_midpoint) < 0:
                     inside = False
                     break
+
+            row = round(ray[0] // 1)
+            col = round(ray[1] // 1)
             
             if inside:
-                return (0, objs.index(object))
+                return (0, objs.index(object),row,col)
 
 
         if ray[2] <= 0.0:
             break
-        
-    row = ray[0] // 1
-    col = ray[1] // 1
 
-    return (1,row, col)
+    row = round(ray[0] // 1)
+    col = round(ray[1] // 1)    
+
+
+    return (1,None,row, col)
         
 def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_pieces, freezes,bomb_placed, report_actions_left=False ):
     
@@ -1266,7 +1270,6 @@ def main_nogui( args ):
                 frozen_pieces.remove(frozen_piece)
 
 def main_gui( args ):
-    
 
     # Const
     RESOLUTION = (1000,1000)
@@ -1274,6 +1277,10 @@ def main_gui( args ):
     # Game var
     board = [["" for x in range(args["board_width"])] for y in range(args["board_height"])]
     selected = None
+    selected_row = None
+    selected_column = None
+    wl, al, sl, dl = (False,False,False,False)
+
     read_stdin_setup_to_board(board,report=False)
 
     max_row = len(board)-1
@@ -1341,7 +1348,7 @@ def main_gui( args ):
         for i in range(len(objects)):
             default = (200,200,200) if objects[i][3] == "l" else (20,20,20)
             if selected == i:
-                objects[i][2] = (default[0]+50,default[1]+50, default[2]+55)
+                objects[i][2] = (default[0]+55,default[1]+55, default[2]+55)
             else:
                 objects[i][2] = default
 
@@ -1361,10 +1368,14 @@ def main_gui( args ):
             result = cast_mouse_ray(board,objects,cx,cy,cz,cpitch,cyaw)
             if result[0] == 0:
                 selected = result[1]
+                selected_row = result[2]
+                selected_column = result[3]
             else:
                 selected = None
+                selected_row = result[2]
+                selected_column = result[3]
 
-        # Rotate yaw
+        # Rotate camera
         keys = stddraw.getKeysPressed()
         left, right = (keys[stddraw.K_LEFT], keys[stddraw.K_RIGHT])
         if left or right:
@@ -1372,6 +1383,33 @@ def main_gui( args ):
             angle = speed if left else -speed
             cyaw += angle
             cx, cy,cz = rotate_around_point(cx,cy,cz,board_midpoint[0],board_midpoint[1],0,0,angle,0)
+
+        # Move blocks
+        w,a,s,d = (keys[ord("w")],keys[ord("a")],keys[ord("s")],keys[ord("d")])
+        if selected != None:
+            obj = objects[selected]
+
+            if not wl and w:
+                result = move_pieces(board,f"{selected_row} {selected_column} u",True, 1, 2, [], 2, False)
+                axis = sorted(obj[0],key=lambda x: x[0]-x[1]-x[2], reverse=True)[0]
+                for i in range(len(obj[0])):
+                    x,y,z = obj[0][i]
+                    obj[0][i] = rotate_around_point(x,y,z,axis[0],axis[1],axis[2],pi/2,0,0)
+
+            if not al and a:
+                result = move_pieces(board,f"{selected_row} {selected_column} l",True, 1, 2, [], 2, False)
+                axis = sorted(obj[0],key=lambda x: x[0]-x[1]-x[2], reverse=True)[0]
+                for i in range(len(obj[0])):
+                    x,y,z = obj[0][i]
+                    obj[0][i] = rotate_around_point(x,y,z,axis[0],axis[1],axis[2],0,0,pi/2)
+
+            if not sl and s:
+                pass
+            if not dl and d:
+                pass
+        wl, al, sl, dl = (w,a,s,d)
+        
+
         
 
         # Update

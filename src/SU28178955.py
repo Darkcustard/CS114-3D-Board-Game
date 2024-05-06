@@ -4,7 +4,6 @@ import stdio
 
 from math import cos, sin, tan, pi, atan, asin
 
-
 ERRORS = {
     "illegal" : "ERROR: Illegal argument",
     "few_args" : "ERROR: Too few arguments",
@@ -206,6 +205,18 @@ def points_to_triangles(points, triangle_table,color, cx,cy,cz,cpitch,cyaw,croll
     faces = points_to_faces(points, triangle_table)
     return faces_to_triangles(faces,color, cx, cy, cz, cpitch, cyaw, croll)
     
+def get_object_average_coordinate(obj):
+
+    ax, ay = (0,0)
+    for i in range(len(obj[0])):
+        x,y,_ = obj[0][i]
+        ax += x
+        ay += y
+
+    ax/=len(obj[0])
+    ay/=len(obj[0])
+
+    return round(ax//1), round(ay//1)
 
 
 # Validators
@@ -445,6 +456,14 @@ def read_stdin_setup_to_board( board, report=True ):
 
             elif piece_type == 'd':
 
+                # Free field check
+
+                for y in range(2):
+                    for x in range(2):
+                        if board[args["board_height"]-row-1-y][col+x] != '':
+                            stdio.writeln(ERRORS["field_not_free(r,c)"](row+y,col+x))
+                            quit()
+
                 root_id = int(row)*args["board_width"]+int(col)
                 board[args["board_height"]-row-1][col] = id
                 board[args["board_height"]-row-2][col] = root_id
@@ -559,21 +578,24 @@ def draw_objects(objs,cx,cy,cz,cpitch,cyaw,croll):
         stddraw.setPenColor(color)
         stddraw.filledPolygon([a[0],b[0],c[0]],[a[1],b[1],c[1]])   
 
-def rotate_object(obj,steps,point,pitch,yaw,roll,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects):
+def draw_scene(floor,lines,sinks,objects,cx,cy,cz,cpitch,cyaw,croll,lights_turn):
 
-    def draw_scene():
+    stddraw.clear(stddraw.color.Color(0,125,125))
 
-        stddraw.clear(stddraw.color.Color(0,125,125))
+    stddraw.setPenColor(stddraw.color.Color(255,255,255))
+    floor_projected = [perspective_transform(corner[0],corner[1],corner[2],cx,cy,cz,cpitch,cyaw,croll)[0] for corner in floor]
+    fx, fy = ([coord[0] for coord in floor_projected],[coord[1] for coord in floor_projected])
+    stddraw.filledPolygon(fx,fy)
 
-        stddraw.setPenColor(stddraw.color.Color(255,255,255))
-        floor_projected = [perspective_transform(corner[0],corner[1],corner[2],cx,cy,cz,cpitch,cyaw,croll)[0] for corner in floor]
-        fx, fy = ([coord[0] for coord in floor_projected],[coord[1] for coord in floor_projected])
-        stddraw.filledPolygon(fx,fy)
+    draw_lines(lines,cx,cy,cz,cpitch,cyaw,croll)
+    draw_objects(sinks,cx,cy,cz,cpitch,cyaw,croll)
+    draw_objects(objects,cx,cy,cz,cpitch,cyaw,croll)
 
-        draw_lines(lines,cx,cy,cz,cpitch,cyaw,croll)
-        draw_objects(sinks,cx,cy,cz,cpitch,cyaw,croll)
-        draw_objects(objects,cx,cy,cz,cpitch,cyaw,croll)
+    # HUD
+    draw_hud(lights_turn,cyaw)
 
+
+def rotate_object(obj,steps,point,pitch,yaw,roll,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects,lights_turn):
     
     step_size_pitch = pitch/steps
     step_size_yaw = yaw/steps
@@ -583,7 +605,7 @@ def rotate_object(obj,steps,point,pitch,yaw,roll,cx,cy,cz,cpitch,cyaw,croll,floo
         for i in range(len(obj[0])):
             x,y,z = obj[0][i]
             obj[0][i] = rotate_around_point(x,y,z,point[0],point[1],point[2],step_size_pitch,step_size_yaw,step_size_roll)
-            draw_scene()
+            draw_scene(floor,lines,sinks,objects,cx,cy,cz,cpitch,cyaw,croll,lights_turn)
             stddraw.show(0)
 
 def angle_radius_to_xyz(r,pitch,yaw):
@@ -593,10 +615,11 @@ def angle_radius_to_xyz(r,pitch,yaw):
     return (x,y,z)
 
 def draw_lines(lines, cx,cy,cz,cpitch,cyaw,croll):
-    stddraw.setPenColor(stddraw.BLACK)
-    stddraw.setPenRadius(0)
+    
     for line in lines:
-        start, end = line
+        start, end, color, radius = line
+        stddraw.setPenColor(color)
+        stddraw.setPenRadius(radius)
         start = perspective_transform(start[0],start[1],start[2],cx,cy,cz,cpitch,cyaw,croll)[0]
         end = perspective_transform(end[0],end[1],end[2],cx,cy,cz,cpitch,cyaw,croll)[0]
         stddraw.line(start[0],start[1],end[0],end[1])
@@ -1208,6 +1231,68 @@ def move_pieces ( board, command, lights_turn, turn_number, sink_moves, frozen_p
         if not report_actions_left : stdio.writeln(ERRORS["invalid_direction(d)"](move_type)); exit()
         else: return False
 
+def color_objects(objects, selected):
+
+    for i in range(len(objects)):
+        default = (180,180,180) if objects[i][3] == "l" else (20,20,20)
+        if selected == i:
+            objects[i][2] = (default[0]+75,default[1], default[2])
+        else:
+            objects[i][2] = default
+
+def handle_object_selection(board,objects,cx,cy,cz,cpitch,cyaw):
+
+    result = cast_mouse_ray(board,objects,cx,cy,cz,cpitch,cyaw)
+
+    if result[0] == 0:
+        return (result[1],result[2],result[3])
+    else:
+        return (None, result[2], result[3])
+
+def yaw_camera(keys, board_midpoint,left,cx,cy,cz,cyaw, speed=0.005):
+
+    angle = speed if left else -speed
+    nx, ny, nz = rotate_around_point(cx,cy,cz,board_midpoint[0],board_midpoint[1],0,0,angle,0)
+    return (nx,ny,nz, cyaw+angle)
+
+def write_board_to_objects(board, objects, sinks):
+
+    sizes = {"a" : (1,1,1),"b" : (1,1,2) ,"c" : (1,1,3) ,"d" : (2,2,2)}
+    max_row = len(board)-1
+    max_col = len(board[0])-1
+
+    for row in range(len(board)):
+        for col in range(len(board[0])):
+
+            piece = board[row][col]
+
+            if piece in list("AaBbCcDds"):
+
+                lower_piece = piece.lower()
+
+                if lower_piece in list("abcd"):
+                
+                    team = "l" if piece.islower() else "d"
+                    size = sizes[lower_piece]
+                    objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](max_row-row,col,0,size[0],size[1],size[2]),GEOMETRY["prism_triangle_table"],(20,20,20),team])
+
+                if lower_piece == "s":
+                    sinks.append([GEOMETRY["get_plane_points(x,y,z,l,w)"](max_row-row,col,0,1,1),GEOMETRY["plane_triangle_table"],(0,0,0),None])
+
+def draw_hud(lights_turn,cyaw):
+    stddraw.setPenRadius(0.0025)
+    stddraw.setPenColor(stddraw.WHITE if lights_turn else stddraw.BLACK)
+
+    # 4 lines
+    stddraw.line(-1,1,1,1)
+    stddraw.line(1,1,1,-1)
+    stddraw.line(-1,-1,1,-1)
+    stddraw.line(-1,-1,-1,1)
+
+    stddraw.filledCircle(0.0,-0.8,0.1)
+
+    stddraw.setPenColor(stddraw.BLACK if lights_turn else stddraw.WHITE)
+    stddraw.line(0.0,-0.8,0.1*cos(cyaw+pi/2),-0.8+0.1*sin(cyaw+pi/2))
 
 
 # Game loop
@@ -1298,22 +1383,31 @@ def main_nogui( args ):
 
 def main_gui( args ):
 
-    # Const
-    RESOLUTION = (1000,1000)
-
     # Game var
     board = [["" for x in range(args["board_width"])] for y in range(args["board_height"])]
+    lights_turn = True
+    turn_counter = 1
+    pre_turn_board = copy_board(board)
+    sink_moves = {"l" : 2, "d" : 2}
+    freezes = {"l" : 2, "d" : 2}
+    player_scores = {"l" : 0, "d" : 0}
+    bomb_placed = False
+    bombs = []
+    frozen_pieces = [] # FMT (row, col, owned_by_light?, counter)
+
+    # Util Var
     selected = None
     selected_row = None
     selected_column = None
     wl, al, sl, dl = (False,False,False,False)
+    moves = 0
 
-    read_stdin_setup_to_board(board,report=False)
-
+    # Const
+    RESOLUTION = (1000,1000)
     max_row = len(board)-1
     max_col = len(board[0])-1
-    
     board_midpoint = (len(board)/2,len(board[0])/2)
+
 
     # Configure Window
     stddraw.setCanvasSize(RESOLUTION[0], RESOLUTION[1])
@@ -1331,176 +1425,89 @@ def main_gui( args ):
 
     # floor
     floor = [(0,0,0),(max_row+1,0,0),(max_row+1,max_col+1,0),(0,max_col+1,0)]
-
-    # Create Board lines
     for row in range(args["board_height"]+1):
-        lines.append(((row,0,0),(row,args["board_width"],0)))
+        lines.append(((row,0,0),(row,args["board_width"],0),stddraw.BLACK,0))
     for col in range(args["board_width"]+1):
-        lines.append(((0,col,0),(args["board_height"],col,0)))
+        lines.append(((0,col,0),(args["board_height"],col,0),stddraw.BLACK,0))
 
-
-    # Create 3D objects from board
-    for row in range(len(board)):
-        for col in range(len(board[0])):
-
-            piece = board[row][col]
-
-            if piece in list("AaBbCcDds"):
-                lower_piece = piece.lower()
-                if lower_piece in list("abcd"):
-                
-                    team = "l" if piece.islower() else "d"
-
-                    if lower_piece == "a":
-                        size = (1,1,1)
-                    elif lower_piece == "b":
-                        size = (1,1,2)
-                    elif lower_piece == "c":
-                        size = (1,1,3)
-                    else:
-                        size = (2,2,2)
-
-                    objects.append([GEOMETRY["get_prism_points(x,y,z,l,w,h)"](max_row-row,col,0,size[0],size[1],size[2]),GEOMETRY["prism_triangle_table"],(20,20,20),team])
-
-                if lower_piece == "s":
-                    sinks.append([GEOMETRY["get_plane_points(x,y,z,l,w)"](max_row-row,col,0,1,1),GEOMETRY["plane_triangle_table"],(0,0,0),None])
+    # Create 3D objeWHITE cts from board
+    read_stdin_setup_to_board(board,report=False)
+    write_board_to_objects(board,objects,sinks)
 
 
 
     while True:
-        # BG
-        stddraw.clear(stddraw.color.Color(0,125,125))
-        
-        # Reset colors of selected objects
-        for i in range(len(objects)):
-            default = (200,200,200) if objects[i][3] == "l" else (20,20,20)
-            if selected == i:
-                objects[i][2] = (default[0]+55,default[1]+55, default[2]+55)
-            else:
-                objects[i][2] = default
 
-        # Draw game objects
-        stddraw.setPenColor(stddraw.color.Color(255,255,255))
-        floor_projected = [perspective_transform(corner[0],corner[1],corner[2],cx,cy,cz,cpitch,cyaw,croll)[0] for corner in floor]
-        fx, fy = ([coord[0] for coord in floor_projected],[coord[1] for coord in floor_projected])
-        stddraw.filledPolygon(fx,fy)
-
-        draw_lines(lines,cx,cy,cz,cpitch,cyaw,croll)
-        draw_objects(sinks,cx,cy,cz,cpitch,cyaw,croll)
-        draw_objects(objects,cx,cy,cz,cpitch,cyaw,croll)
-
-        # Select objects
+        # get input
         mouse_state = stddraw.mousePressed()
-        if mouse_state:
-            result = cast_mouse_ray(board,objects,cx,cy,cz,cpitch,cyaw)
-            if result[0] == 0:
-                selected = result[1]
-                selected_row = result[2]
-                selected_column = result[3]
-            else:
-                selected = None
-                selected_row = result[2]
-                selected_column = result[3]
-
-        # Rotate camera
         keys = stddraw.getKeysPressed()
         left, right = (keys[stddraw.K_LEFT], keys[stddraw.K_RIGHT])
+        w,a,s,d = (keys[ord("w")],keys[ord("a")],keys[ord("s")],keys[ord("d")])
+
+
+        # Track gamevar
+        if turn_counter == 3: turn_counter = 1; lights_turn = not lights_turn; bomb_placed = False
+
+        # Reset colors of selected objects
+        color_objects(objects,selected)
+        draw_scene(floor,lines,sinks,objects,cx,cy,cz,cpitch,cyaw,croll,lights_turn)
+
+        # Select objects
+        if mouse_state:
+            selected, selected_row, selected_column = handle_object_selection(board, objects,cx,cy,cz,cpitch,cyaw)
+
+        # Rotate camera
         if left or right:
-            speed = 0.05
-            angle = speed if left else -speed
-            cyaw += angle
-            cx, cy,cz = rotate_around_point(cx,cy,cz,board_midpoint[0],board_midpoint[1],0,0,angle,0)
+            cx,cy,cz,cyaw = yaw_camera(keys,board_midpoint,left, cx,cy,cz,cyaw)
+
 
         # Move blocks
-        w,a,s,d = (keys[ord("w")],keys[ord("a")],keys[ord("s")],keys[ord("d")])
-        steps = 20
-
-
         if selected != None:
+
             obj = objects[selected]
+            steps = 20
 
             if not wl and w:
-                if move_pieces(board,f"{selected_row} {selected_column} u",True, 1, 2, [], 2, False, True):
-                    result = move_pieces(board,f"{selected_row} {selected_column} u",True, 1, 2, [], 2, False)
+                if move_pieces(board,f"{selected_row} {selected_column} u",lights_turn, 1, 2, [], 2, False, True):
+                    result = move_pieces(board,f"{selected_row} {selected_column} u",lights_turn, 1, 2, [], 2, False)
                     axis = sorted(obj[0],key=lambda x: x[0]-x[1]-x[2], reverse=True)[0]
-                    rotate_object(obj,steps,axis,pi/2,0,0,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects)
-                        
-
-                    ax, ay = (0,0)
-                    for i in range(len(obj[0])):
-                        x,y,_ = obj[0][i]
-                        ax += x
-                        ay += y
-
-                    ax/=len(obj[0])
-                    ay/=len(obj[0])
-
-                    selected_row = round(ax//1)
-                    selected_column = round(ay//1)
-
-
+                    rotate_object(obj,steps,axis,pi/2,0,0,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects,lights_turn)
+                    selected_row, selected_column = get_object_average_coordinate(obj)
+                    turn_counter += 1
 
             if not al and a:
-                if move_pieces(board,f"{selected_row} {selected_column} l",True, 1, 2, [], 2, False, True):
-                    result = move_pieces(board,f"{selected_row} {selected_column} l",True, 1, 2, [], 2, False)
+                if move_pieces(board,f"{selected_row} {selected_column} l",lights_turn, 1, 2, [], 2, False, True):
+                    result = move_pieces(board,f"{selected_row} {selected_column} l",lights_turn, 1, 2, [], 2, False)
                     axis = sorted(obj[0],key=lambda x: -x[0]-x[1]-x[2], reverse=True)[0]
-                    rotate_object(obj,steps,axis,0,0,pi/2,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects)
-
-                    ax, ay = (0,0)
-                    for i in range(len(obj[0])):
-                        x,y,_ = obj[0][i]
-                        ax += x
-                        ay += y
-
-                    ax/=len(obj[0])
-                    ay/=len(obj[0])
-
-                    selected_row = round(ax//1)
-                    selected_column = round(ay//1)
+                    rotate_object(obj,steps,axis,0,0,pi/2,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects,lights_turn)
+                    selected_row, selected_column = get_object_average_coordinate(obj)
+                    turn_counter += 1
 
             if not sl and s:
-                if move_pieces(board,f"{selected_row} {selected_column} d",True, 1, 2, [], 2, False, True):
-                    result = move_pieces(board,f"{selected_row} {selected_column} d",True, 1, 2, [], 2, False)
+                if move_pieces(board,f"{selected_row} {selected_column} d",lights_turn, 1, 2, [], 2, False, True):
+                    result = move_pieces(board,f"{selected_row} {selected_column} d",lights_turn, 1, 2, [], 2, False)
                     axis = sorted(obj[0],key=lambda x: -x[0]-x[1]-x[2], reverse=True)[0]
-                    rotate_object(obj,steps,axis,-pi/2,0,0,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects)
-
-                    ax, ay = (0,0)
-                    for i in range(len(obj[0])):
-                        x,y,_ = obj[0][i]
-                        ax += x
-                        ay += y
-
-                    ax/=len(obj[0])
-                    ay/=len(obj[0])
-
-                    selected_row = round(ax//1)
-                    selected_column = round(ay//1)
+                    rotate_object(obj,steps,axis,-pi/2,0,0,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects,lights_turn)
+                    selected_row, selected_column = get_object_average_coordinate(obj)
+                    turn_counter += 1
 
             if not dl and d:
-                if move_pieces(board,f"{selected_row} {selected_column} r",True, 1, 2, [], 2, False, True):
-                    result = move_pieces(board,f"{selected_row} {selected_column} r",True, 1, 2, [], 2, False)
+                if move_pieces(board,f"{selected_row} {selected_column} r",lights_turn, 1, 2, [], 2, False, True):
+                    result = move_pieces(board,f"{selected_row} {selected_column} r",lights_turn, 1, 2, [], 2, False)
                     axis = sorted(obj[0],key=lambda x: -x[0]+x[1]-x[2], reverse=True)[0]
-                    rotate_object(obj,steps,axis,0,0,-pi/2,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects)
+                    rotate_object(obj,steps,axis,0,0,-pi/2,cx,cy,cz,cpitch,cyaw,croll,floor,lines,sinks,objects,lights_turn)
+                    selected_row, selected_column = get_object_average_coordinate(obj)
+                    turn_counter += 1
 
-                    ax, ay = (0,0)
-                    for i in range(len(obj[0])):
-                        x,y,_ = obj[0][i]
-                        ax += x
-                        ay += y
-
-                    ax/=len(obj[0])
-                    ay/=len(obj[0])
-
-                    selected_row = round(ax//1)
-                    selected_column = round(ay//1)
-
-        wl, al, sl, dl = (w,a,s,d)
         
-
         
 
         # Update
+        wl, al, sl, dl = (w,a,s,d)
         stddraw.show(0)
+
+
+
       
 # Program Entry point
 if __name__ == "__main__":
